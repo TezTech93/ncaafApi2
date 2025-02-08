@@ -7,7 +7,7 @@ now = dt.datetime.now()
 today = f'{now.month},{now.day},{now.year}'
 
 off_headers = [
-    'Rk','Date'	,'Location','Opponent','Result','Cmp','Att','Pct','Yds','TD','Att','Yds','Avg','TD','Plays',
+    'Date','Home','Opp','Result','Cmp','Att','Pct','Yds','TD','Att','Yds','Avg','TD','Plays',
     'Yds','Avg','Pass','Rush','Pen','Tot','No',	'Yds','Fum','Int','Tot'
 ]
 
@@ -20,12 +20,14 @@ def get_team_stats(team,year):
     url = f'https://www.sports-reference.com/cfb/schools/{team}/{year}/gamelog/'
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
-    body = soup.find('tbody')
-    rows = body.find_all('tr')  
+    off_body = soup.find(id='offense')
+    off_tbody = off_body.find('tbody')
+    off_rows = off_body.find_all('tr')   
 
     all_data = []
-    for row in rows:
+    for row in off_rows:
         cells = row.find_all('td')
+        print(len(cells))
         if not cells:
             continue
 
@@ -66,4 +68,4 @@ def get_coach_stats(coach):
     pass
 
 get_player_stats('Dell Curry','2024')
-get_team_stats("Ohio-State",'2024')
+get_team_stats("ohio-state",'2024')

@@ -35,7 +35,7 @@ def current_gamelines(url):
                     'over_odds': ovSpreadOdds, 'under_odds': unSpreadOdds}
                     gameline = []
                     all_gamelines.append(my_dict)
-    nba_game_lines = all_gamelines
-    return nba_game_lines
+    ncaaf_game_lines = all_gamelines
+    return ncaaf_game_lines
 
-nba_game_lines = current_gamelines(url3)
+ncaaf_game_lines = current_gamelines(url3)
