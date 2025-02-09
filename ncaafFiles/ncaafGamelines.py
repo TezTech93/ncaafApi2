@@ -2,7 +2,7 @@ import requests
 import bs4
 from bs4 import BeautifulSoup
 
-url3 = 'https://sportsbook.draftkings.com/leagues/basketball/ncaaf'
+url3 = 'https://sportsbook.draftkings.com/leagues/football/ncaaf'
 
 def current_gamelines(url):
     a = 0
