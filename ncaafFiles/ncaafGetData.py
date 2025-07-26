@@ -66,6 +66,3 @@ def get_player_stats(player,year):
 
 def get_coach_stats(coach):
     pass
-
-get_player_stats('Dell Curry','2024')
-get_team_stats("ohio-state",'2024')
