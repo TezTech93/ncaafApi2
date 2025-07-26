@@ -15,34 +15,78 @@ def get_draftkings_ncaaf_gamelines():
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         
-        # Extract JSON data
-        match = re.search(r'window\.__INITIAL_STATE__\s*=\s*({.*?});', response.text, re.DOTALL)
-        if not match:
+        # Debug: Save response to file
+        with open('ncaaf_response.html', 'w', encoding='utf-8') as f:
+            f.write(response.text)
+        
+        # Extract JSON data - try multiple patterns
+        json_patterns = [
+            r'window\.__INITIAL_STATE__\s*=\s*({.*?});',
+            r'window\.__PRELOADED_STATE__\s*=\s*({.*?});',
+            r'window\.__DK_DATA__\s*=\s*({.*?});'
+        ]
+        
+        json_data = None
+        for pattern in json_patterns:
+            match = re.search(pattern, response.text, re.DOTALL)
+            if match:
+                json_data = match.group(1)
+                break
+                
+        if not json_data:
             print("Could not find JSON data in page")
             return []
             
-        data = json.loads(match.group(1))
+        data = json.loads(json_data)
         
-        # Access the stadium league data
-        stadium_data = data.get('stadiumLeagueData', {})
-        if not stadium_data:
-            print("No stadium league data found")
-            return []
+        # Debug: Save JSON data to file
+        with open('ncaaf_data.json', 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
         
-        # NCAAF has leagueId 88809
-        ncaaf_events = [
-            e for e in stadium_data.get('events', []) 
-            if e.get('leagueId') == '88809'
+        # Try different data locations - DraftKings sometimes changes these
+        possible_data_locations = [
+            data.get('stadiumLeagueData', {}),
+            data.get('sportsbook', {}),
+            data.get('events', {}),
+            data.get('presentation', {}).get('sports', {}),
+            data.get('presentation', {}).get('events', {})
         ]
         
+        ncaaf_events = []
+        possible_league_ids = ['88809', '84606', '87637']  # Common NCAAF league IDs
+        
+        for data_location in possible_data_locations:
+            if not data_location:
+                continue
+                
+            # Try to find events with any of the possible league IDs
+            for league_id in possible_league_ids:
+                ncaaf_events = [
+                    e for e in data_location.get('events', []) 
+                    if e.get('leagueId') == league_id
+                ]
+                if ncaaf_events:
+                    print(f"Found NCAAF events with league ID: {league_id}")
+                    break
+            if ncaaf_events:
+                break
+                
         if not ncaaf_events:
-            print("No NCAAF events found in stadium data")
+            print("No NCAAF events found in any data location")
+            print("Available league IDs found:", 
+                  {e.get('leagueId') for loc in possible_data_locations 
+                   for e in loc.get('events', [])})
             return []
             
-        # Get all markets and selections
-        markets = stadium_data.get('markets', [])
-        selections = stadium_data.get('selections', [])
-        
+        # Get all markets and selections from the data location that worked
+        markets = []
+        selections = []
+        for loc in possible_data_locations:
+            if 'markets' in loc and 'selections' in loc:
+                markets = loc.get('markets', [])
+                selections = loc.get('selections', [])
+                break
+                
         gamelines = []
         
         for event in ncaaf_events:
