@@ -137,8 +137,8 @@ def get_draftkings_ncaaf_gamelines_json():
             return []
             
         # Extract markets and selections
-        markets = next((loc.get('markets', []) for loc in possible_data_locations if 'markets' in loc)
-        selections = next((loc.get('selections', []) for loc in possible_data_locations if 'selections' in loc)
+        markets = next((loc.get('markets', []) for loc in possible_data_locations if 'markets' in loc))
+        selections = next((loc.get('selections', []) for loc in possible_data_locations if 'selections' in loc))
         
         gamelines = []
         for event in ncaaf_events:
