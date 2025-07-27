@@ -27,6 +27,7 @@ def get_ncaaf_gamelines_selenium_fallback():
         driver.get(url)
         WebDriverWait(driver, 15).until(
             EC.presence_of_all_elements_located((By.CSS_SELECTOR, "div.sportsbook-event-accordion"))
+        )
         
         # Scroll and wait for dynamic content
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
