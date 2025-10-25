@@ -1,68 +1,92 @@
-
-import datetime as dt
 import requests
-from bs4 import BeautifulSoup
+import json
+from datetime import datetime
+import logging
 
-now = dt.datetime.now()
-today = f'{now.month},{now.day},{now.year}'
+logger = logging.getLogger(__name__)
 
-off_headers = [
-    'Date','Home','Opp','Result','Cmp','Att','Pct','Yds','TD','Att','Yds','Avg','TD','Plays',
-    'Yds','Avg','Pass','Rush','Pen','Tot','No',	'Yds','Fum','Int','Tot'
-]
-
-def_headers = [
-    'Rk_Def2','Date_Def'	,'Location_Def','Opponent_Def','Result_Def','Cmp_Def','Att_Def','Pct_Def','Yds_Def','TD_Def','Att_Def','Yds_Def','Avg_Def','TD_Def','Plays_Def',
-    'Yds_Def','Avg_Def','Pass_Def','Rush_Def','Pen_Def','Tot_Def','No_Def',	'Yds_Def','Fum_Def','Int_Def','Tot_Def'
-]
-
-def get_team_stats(team,year):
-    url = f'https://www.sports-reference.com/cfb/schools/{team}/{year}/gamelog/'
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    off_body = soup.find(id='offense')
-    off_tbody = off_body.find('tbody')
-    off_rows = off_body.find_all('tr')   
-
-    all_data = []
-    for row in off_rows:
-        cells = row.find_all('td')
-        print(len(cells))
-        if not cells:
-            continue
-
-        data = {
-        header: cells[idx].text if len(cells) > idx else None
-        for idx, header in enumerate(off_headers)
-    }
-        
-        all_data.append(data)
-
-    print(all_data)
-    print(type(all_data))
+def get_team_stats(team, year):
+    """
+    Get NCAAF team statistics for a given team and year
+    Placeholder function - implement with actual NCAAF data source
+    """
     try:
-        return all_data
+        # This would be replaced with actual NCAAF API calls
+        # For now, return mock data
+        mock_data = {
+            "team": team,
+            "year": year,
+            "games_played": 12,
+            "wins": 9,
+            "losses": 3,
+            "conference": "SEC",
+            "points_per_game": 34.2,
+            "points_allowed_per_game": 21.5,
+            "total_yards_per_game": 445.8,
+            "passing_yards_per_game": 285.4,
+            "rushing_yards_per_game": 160.4,
+            "turnovers": 12,
+            "takeaways": 18
+        }
+        return mock_data
     except Exception as e:
-        return e
+        logger.error(f"Error getting NCAAF team stats: {e}")
+        return None
 
+def get_player_stats(player, season=None):
+    """
+    Get NCAAF player statistics
+    Placeholder function - implement with actual NCAAF data source
+    """
+    try:
+        # This would be replaced with actual NCAAF API calls
+        mock_data = {
+            "player": player,
+            "season": season or "2023",
+            "games_played": 12,
+            "passing_yards": 3250,
+            "passing_tds": 28,
+            "interceptions": 5,
+            "completion_percentage": "65.8%",
+            "rushing_yards": 450,
+            "rushing_tds": 8
+        }
+        return mock_data
+    except Exception as e:
+        logger.error(f"Error getting NCAAF player stats: {e}")
+        return None
 
-
-def get_player_stats(player,year):
-    fname_lname = player.split(' ')
-    fname = fname_lname[0]
-    lname = fname_lname[1]
-    letter = lname[0].lower()
-    print(letter)
-    player_id = lname[0:5] + fname[0:2] +'01'
-    player_id = player_id.lower()
-    print(player_id)
-    #url = 'https://www.basketball-reference.com/players/{letter}/{player_id}/gamelog/{year}'
-    #response = requests.get(url)
-    #soup = BeautifulSoup(response.text, 'html.parser')
-    #rows = soup.find_all('tr')
-
-    #for row in rows:
-        #print(row)
-
-def get_coach_stats(coach):
-    pass
+def get_team_gamelog(team, year):
+    """
+    Get NCAAF team gamelog for a given team and year
+    Placeholder function - implement with actual NCAAF data source
+    """
+    try:
+        # This would be replaced with actual NCAAF API calls
+        mock_games = [
+            {
+                "date": "2024-09-02",
+                "opponent": "Florida St",
+                "result": "W",
+                "score": "31-24",
+                "home_away": "HOME"
+            },
+            {
+                "date": "2024-09-09", 
+                "opponent": "LSU",
+                "result": "L",
+                "score": "28-35",
+                "home_away": "AWAY"
+            },
+            {
+                "date": "2024-09-16",
+                "opponent": "Arkansas",
+                "result": "W",
+                "score": "42-14", 
+                "home_away": "HOME"
+            }
+        ]
+        return mock_games
+    except Exception as e:
+        logger.error(f"Error getting NCAAF team gamelog: {e}")
+        return None
