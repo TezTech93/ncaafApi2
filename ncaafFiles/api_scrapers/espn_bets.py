@@ -184,7 +184,3 @@ if ncaaf_games:
         print(f"{game['away']} @ {game['home']} - Spread: {game['home_spread']} | Total: {game['total']}")
 else:
     print("No NCAAF games found")
-except Exception as e:
-print(f"Error testing NCAAF scraper: {e}")
-# Return empty list as fallback
-print("Returning empty game list as fallback")
