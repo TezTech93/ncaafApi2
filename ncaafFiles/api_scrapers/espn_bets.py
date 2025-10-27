@@ -36,7 +36,19 @@ def get_espn_bets_gamelines():
             events += 1
             if 'competitions' in event:
                 for competition in event['competitions']:
-                    if 'odds' in competition and competition['odds']:
+                    # Extract teams first
+                    home_team = ""
+                    away_team = ""
+                    
+                    if 'competitors' in competition:
+                        for competitor in competition['competitors']:
+                            if competitor.get('homeAway') == 'home':
+                                home_team = competitor.get('team', {}).get('abbreviation', '') or competitor.get('team', {}).get('name', '')
+                            elif competitor.get('homeAway') == 'away':
+                                away_team = competitor.get('team', {}).get('abbreviation', '') or competitor.get('team', {}).get('name', '')
+                    
+                    # Only process if we have both teams
+                    if home_team and away_team:
                         # Extract date and time
                         date_str = event.get('date', '')
                         game_date = datetime.fromisoformat(date_str.replace('Z', '+00:00')).strftime('%Y-%m-%d') if date_str else ''
@@ -45,23 +57,30 @@ def get_espn_bets_gamelines():
                         game_info = {
                             'game_id': competition.get('id'),
                             'name': event.get('name'),
-                            'short_name': event.get('shortName'),
+                            'short_name': f"{away_team} @ {home_team}",
                             'game_day': game_date,
                             'start_time': game_time,
-                            'source': 'espn_bets'
+                            'source': 'espn_bets',
+                            'home_team': home_team,
+                            'away_team': away_team
                         }
                         
-                        for odds_entry in competition['odds']:
-                            line = {
-                                'provider': odds_entry.get('provider', {}).get('name'),
-                                'over_under': odds_entry.get('overUnder'),
-                                'spread': odds_entry.get('spread'),
-                                'home_moneyline': odds_entry.get('homeTeamOdds', {}).get('moneyLine'),
-                                'away_moneyline': odds_entry.get('awayTeamOdds', {}).get('moneyLine')
-                            }
-                            game_lines.append({**game_info, **line})
+                        # Check if odds are available
+                        if 'odds' in competition and competition['odds']:
+                            for odds_entry in competition['odds']:
+                                line = {
+                                    'provider': odds_entry.get('provider', {}).get('name'),
+                                    'over_under': odds_entry.get('overUnder'),
+                                    'spread': odds_entry.get('spread'),
+                                    'home_moneyline': odds_entry.get('homeTeamOdds', {}).get('moneyLine'),
+                                    'away_moneyline': odds_entry.get('awayTeamOdds', {}).get('moneyLine')
+                                }
+                                game_lines.append({**game_info, **line})
+                        else:
+                            # Add game without odds data
+                            logger.info(f"No odds available for {away_team} @ {home_team}")
             else:
-                return False
+                logger.warning("No competitions found in event")
     else:
         logger.warning("No 'events' key found in the JSON response") 
 
@@ -76,67 +95,70 @@ def restructure_gameline_data(raw_data):
     structured_data = []
 
     for game in raw_data:
-        # Extract the necessary team names
-        names = game['short_name'].split('@')
-        away_team = names[0].strip()
-        home_team = names[1].strip()
-        
-        # Extract spread data
-        home_spread_odds = '-110'
-        away_spread_odds = '-110'
+        try:
+            # Use the team names we already extracted
+            home_team = game.get('home_team', '')
+            away_team = game.get('away_team', '')
+            
+            # Fallback to parsing short_name if teams aren't available
+            if not home_team or not away_team:
+                names = game['short_name'].split('@')
+                if len(names) >= 2:
+                    away_team = names[0].strip()
+                    home_team = names[1].strip()
+                else:
+                    logger.warning(f"Could not parse team names from: {game['short_name']}")
+                    continue
+            
+            # Extract spread data
+            home_spread_odds = '-110'
+            away_spread_odds = '-110'
 
-        # Extract moneyline data with None handling
-        home_moneyline = game.get('home_moneyline')
-        away_moneyline = game.get('away_moneyline')
+            # Extract moneyline data
+            home_moneyline = game.get('home_moneyline', 'N/A')
+            away_moneyline = game.get('away_moneyline', 'N/A')
 
-        # Handle spread logic for NCAAF with proper None checking
-        spread = game.get('spread', 0)
-        
-        # Convert None values to 0 for comparison or handle them appropriately
-        home_ml_num = home_moneyline if home_moneyline is not None else 0
-        away_ml_num = away_moneyline if away_moneyline is not None else 0
-        
-        # Determine favorite based on moneyline (lower number is favorite)
-        if home_ml_num != 0 and away_ml_num != 0:
-            if home_ml_num < away_ml_num:  # Home team is favorite
-                home_spread = f"-{spread}"
-                away_spread = f"+{spread}"
-            else:  # Away team is favorite
-                home_spread = f"+{spread}"
-                away_spread = f"-{spread}"
-        else:
-            # If no moneylines, use default spread formatting
-            if spread > 0:
-                home_spread = f"-{spread}"
-                away_spread = f"+{spread}"
+            # Handle spread logic for NCAAF
+            spread = game.get('spread', 0)
+            if home_moneyline != 'N/A' and away_moneyline != 'N/A' and spread:
+                if home_moneyline < away_moneyline:  # Home team is favorite
+                    home_spread = f"-{spread}"
+                    away_spread = f"+{spread}"
+                else:  # Away team is favorite
+                    home_spread = f"+{spread}"
+                    away_spread = f"-{spread}"
             else:
-                home_spread = f"+{abs(spread)}"
-                away_spread = f"-{abs(spread)}"
+                home_spread = f"{spread}" if spread else 'N/A'
+                away_spread = f"{spread}" if spread else 'N/A'
 
-        # Extract Over/Under (total) data with None handling
-        over_under = game.get('over_under', 'N/A')
-        over_odds = '-110'
-        under_odds = '-110'
+            # Extract Over/Under (total) data
+            over_under = game.get('over_under', 'N/A')
+            over_odds = '-110'
+            under_odds = '-110'
 
-        # Create a new dictionary for the game
-        new_game_entry = {
-            'home': home_team,
-            'away': away_team,
-            'home_ml': home_moneyline if home_moneyline is not None else 'N/A',
-            'away_ml': away_moneyline if away_moneyline is not None else 'N/A',
-            'home_spread': home_spread,
-            'away_spread': away_spread,
-            'home_spread_odds': home_spread_odds,
-            'away_spread_odds': away_spread_odds,
-            'total': over_under if over_under is not None else 'N/A',
-            'over_odds': over_odds,
-            'under_odds': under_odds,
-            'game_day': game.get('game_day', ''),
-            'start_time': game.get('start_time', ''),
-            'source': game.get('source', 'espn_bets')
-        }
+            # Create a new dictionary for the game
+            new_game_entry = {
+                'home': home_team,
+                'away': away_team,
+                'home_ml': home_moneyline,
+                'away_ml': away_moneyline,
+                'home_spread': home_spread,
+                'away_spread': away_spread,
+                'home_spread_odds': home_spread_odds,
+                'away_spread_odds': away_spread_odds,
+                'total': over_under,
+                'over_odds': over_odds,
+                'under_odds': under_odds,
+                'game_day': game.get('game_day', ''),
+                'start_time': game.get('start_time', ''),
+                'source': game.get('source', 'espn_bets')
+            }
 
-        structured_data.append(new_game_entry)
+            structured_data.append(new_game_entry)
+            
+        except Exception as e:
+            logger.error(f"Error processing game data: {e}")
+            continue
     
     print(f"Structured {len(structured_data)} NCAAF games")
     return structured_data
@@ -176,6 +198,7 @@ def get_all_ncaaf_gamelines():
         "gamelines": gamelines,
         "last_updated": datetime.now().isoformat()
     }
+
 
 ncaaf_games = get_espn_bets_gamelines()
 if ncaaf_games:
