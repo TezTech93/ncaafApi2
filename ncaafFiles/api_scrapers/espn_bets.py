@@ -85,24 +85,35 @@ def restructure_gameline_data(raw_data):
         home_spread_odds = '-110'
         away_spread_odds = '-110'
 
-        # Extract moneyline data
-        home_moneyline = game.get('home_moneyline', 'N/A')
-        away_moneyline = game.get('away_moneyline', 'N/A')
+        # Extract moneyline data with None handling
+        home_moneyline = game.get('home_moneyline')
+        away_moneyline = game.get('away_moneyline')
 
-        # Handle spread logic for NCAAF
+        # Handle spread logic for NCAAF with proper None checking
         spread = game.get('spread', 0)
-        if home_moneyline != 'N/A' and away_moneyline != 'N/A':
-            if home_moneyline < away_moneyline:  # Home team is favorite
+        
+        # Convert None values to 0 for comparison or handle them appropriately
+        home_ml_num = home_moneyline if home_moneyline is not None else 0
+        away_ml_num = away_moneyline if away_moneyline is not None else 0
+        
+        # Determine favorite based on moneyline (lower number is favorite)
+        if home_ml_num != 0 and away_ml_num != 0:
+            if home_ml_num < away_ml_num:  # Home team is favorite
                 home_spread = f"-{spread}"
                 away_spread = f"+{spread}"
             else:  # Away team is favorite
                 home_spread = f"+{spread}"
                 away_spread = f"-{spread}"
         else:
-            home_spread = f"{spread}"
-            away_spread = f"{spread}"
+            # If no moneylines, use default spread formatting
+            if spread > 0:
+                home_spread = f"-{spread}"
+                away_spread = f"+{spread}"
+            else:
+                home_spread = f"+{abs(spread)}"
+                away_spread = f"-{abs(spread)}"
 
-        # Extract Over/Under (total) data - NCAAF typically has higher totals than NFL
+        # Extract Over/Under (total) data with None handling
         over_under = game.get('over_under', 'N/A')
         over_odds = '-110'
         under_odds = '-110'
@@ -111,13 +122,13 @@ def restructure_gameline_data(raw_data):
         new_game_entry = {
             'home': home_team,
             'away': away_team,
-            'home_ml': home_moneyline,
-            'away_ml': away_moneyline,
+            'home_ml': home_moneyline if home_moneyline is not None else 'N/A',
+            'away_ml': away_moneyline if away_moneyline is not None else 'N/A',
             'home_spread': home_spread,
             'away_spread': away_spread,
             'home_spread_odds': home_spread_odds,
             'away_spread_odds': away_spread_odds,
-            'total': over_under,
+            'total': over_under if over_under is not None else 'N/A',
             'over_odds': over_odds,
             'under_odds': under_odds,
             'game_day': game.get('game_day', ''),
@@ -166,10 +177,18 @@ def get_all_ncaaf_gamelines():
         "last_updated": datetime.now().isoformat()
     }
 
-ncaaf_games = get_espn_bets_gamelines()
-if ncaaf_games:
-    print(f"Successfully fetched {len(ncaaf_games)} NCAAF games")
-    for game in ncaaf_games:
-        print(f"{game['away']} @ {game['home']} - Spread: {game['home_spread']} | Total: {game['total']}")
-else:
-    print("No NCAAF games found")
+# Example usage with error handling
+if __name__ == "__main__":
+    # Test the NCAAF data fetching with error handling
+    try:
+        ncaaf_games = get_espn_bets_gamelines()
+        if ncaaf_games:
+            print(f"Successfully fetched {len(ncaaf_games)} NCAAF games")
+            for game in ncaaf_games:
+                print(f"{game['away']} @ {game['home']} - Spread: {game['home_spread']} | Total: {game['total']}")
+        else:
+            print("No NCAAF games found")
+    except Exception as e:
+        print(f"Error testing NCAAF scraper: {e}")
+        # Return empty list as fallback
+        print("Returning empty game list as fallback")
