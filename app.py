@@ -230,11 +230,13 @@ async def submit_manual_gameline(
             'over_odds': over_odds,
             'under_odds': under_odds
         }
+
+        manager = GamelineManager()
+        manager.update_gameline(source, game_data)
         
         return {
             "status": "success",
             "message": f"NCAAF Gameline for {away_team} @ {home_team} submitted successfully",
-            "data": game_data
         }
         
     except Exception as e:
