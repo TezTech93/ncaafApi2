@@ -19,14 +19,33 @@ app.add_middleware(
 
 # NCAAF team list for dropdowns (FBS teams)
 NCAAF_TEAMS = [
-    "Alabama", "Auburn", "LSU", "Georgia", "Florida", "Tennessee", "Texas A&M", "Ole Miss", "Arkansas", "Mississippi St",
-    "Missouri", "Kentucky", "South Carolina", "Vanderbilt", "Ohio St", "Michigan", "Penn St", "Michigan St", "Wisconsin", "Iowa",
-    "Minnesota", "Purdue", "Illinois", "Northwestern", "Nebraska", "Indiana", "Rutgers", "Maryland", "Oklahoma", "Texas",
-    "Oklahoma St", "Baylor", "TCU", "Texas Tech", "Kansas", "Kansas St", "Iowa St", "West Virginia", "Clemson", "Florida St",
-    "Miami FL", "North Carolina", "NC State", "Virginia Tech", "Pittsburgh", "Wake Forest", "Duke", "Georgia Tech", "Virginia",
-    "Boston College", "Syracuse", "Louisville", "Notre Dame", "USC", "UCLA", "Oregon", "Washington", "Utah", "Stanford",
-    "California", "Arizona", "Arizona St", "Colorado", "Oregon St", "Washington St", "Boise St", "BYU", "Cincinnati", "Houston",
-    "UCF", "Memphis", "SMU", "Tulane", "Navy", "Army", "Air Force", "Coastal Carolina", "Appalachian St", "Liberty"
+    "Air Force", "Akron", "Alabama", "Appalachian State", "Arizona", 
+    "Arizona State", "Arkansas", "Arkansas State", "Army", "Auburn",
+    "Ball State", "Baylor", "Boise State", "Boston College", "Bowling Green",
+    "Buffalo", "BYU", "California", "Central Michigan", "Charlotte",
+    "Cincinnati", "Clemson", "Coastal Carolina", "Colorado", "Colorado State",
+    "Connecticut", "Duke", "East Carolina", "Eastern Michigan", "Florida",
+    "Florida Atlantic", "Florida International", "Florida State", "Fresno State",
+    "Georgia", "Georgia Southern", "Georgia State", "Georgia Tech", "Hawaii",
+    "Houston", "Illinois", "Indiana", "Iowa", "Iowa State", "Jacksonville State",
+    "James Madison", "Kansas", "Kansas State", "Kent State", "Kentucky",
+    "Liberty", "Louisiana", "Louisiana Monroe", "Louisiana Tech", "Louisville",
+    "LSU", "Marshall", "Maryland", "Memphis", "Miami (FL)",
+    "Miami (OH)", "Michigan", "Michigan State", "Middle Tennessee", "Minnesota",
+    "Mississippi State", "Missouri", "Navy", "NC State", "Nebraska",
+    "Nevada", "New Mexico", "New Mexico State", "North Carolina", "North Texas",
+    "Northern Illinois", "Northwestern", "Notre Dame", "Ohio", "Ohio State",
+    "Oklahoma", "Oklahoma State", "Old Dominion", "Ole Miss", "Oregon",
+    "Oregon State", "Penn State", "Pittsburgh", "Purdue", "Rice",
+    "Rutgers", "Sam Houston State", "San Diego State", "San Jose State", "SMU",
+    "South Alabama", "South Carolina", "South Florida", "Southern Miss", "Stanford",
+    "Syracuse", "TCU", "Temple", "Tennessee", "Texas",
+    "Texas A&M", "Texas State", "Texas Tech", "Toledo", "Troy",
+    "Tulane", "Tulsa", "UAB", "UCF", "UCLA",
+    "UMass", "UNLV", "USC", "Utah", "Utah State",
+    "UTEP", "UTSA", "Vanderbilt", "Virginia", "Virginia Tech",
+    "Wake Forest", "Washington", "Washington State", "West Virginia", "Western Kentucky",
+    "Western Michigan", "Wisconsin", "Wyoming"
 ]
 
 # Years for dropdown
