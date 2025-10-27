@@ -17,8 +17,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# NCAAF team list for dropdowns (FBS teams)
 NCAAF_TEAMS = [
+    # FBS Schools (Bowl Subdivision)
     "Air Force", "Akron", "Alabama", "Appalachian State", "Arizona", 
     "Arizona State", "Arkansas", "Arkansas State", "Army", "Auburn",
     "Ball State", "Baylor", "Boise State", "Boston College", "Bowling Green",
@@ -45,7 +45,26 @@ NCAAF_TEAMS = [
     "UMass", "UNLV", "USC", "Utah", "Utah State",
     "UTEP", "UTSA", "Vanderbilt", "Virginia", "Virginia Tech",
     "Wake Forest", "Washington", "Washington State", "West Virginia", "Western Kentucky",
-    "Western Michigan", "Wisconsin", "Wyoming"
+    "Western Michigan", "Wisconsin", "Wyoming",
+    
+    # FCS Schools (Championship Subdivision) playing FBS opponents in 2025
+    "Abilene Christian", "Alabama A&M", "Alabama State", "Albany", "Austin Peay",
+    "Bethune-Cookman", "Bryant", "Bucknell", "Cal Poly", "Campbell",
+    "Central Arkansas", "Central Connecticut State", "Charleston Southern", "Chattanooga", "Colgate",
+    "Delaware State", "Duquesne", "East Texas A&M", "Eastern Illinois", "Eastern Kentucky",
+    "Eastern Washington", "Elon", "ETSU", "Florida A&M", "Fordham",
+    "Furman", "Gardner-Webb", "Grambling State", "Holy Cross", "Houston Christian",
+    "Howard", "Idaho", "Idaho State", "Illinois State", "Incarnate Word",
+    "Indiana State", "Lafayette", "Lamar", "LIU", "Lindenwood",
+    "Maine", "Merrimack", "Monmouth", "Morgan State", "Murray State",
+    "New Hampshire", "Nicholls", "Norfolk State", "North Alabama", "North Carolina A&T",
+    "North Carolina Central", "Northern Arizona", "Northern Iowa", "Northwestern State", "Portland State",
+    "Prairie View A&M", "Rhode Island", "Richmond", "Robert Morris", "Sacramento State",
+    "Saint Francis (PA)", "Samford", "Southeastern Louisiana", "Southeast Missouri State", "South Carolina State",
+    "Southern", "Southern Illinois", "Stony Brook", "Tarleton State", "Tennessee State",
+    "Tennessee Tech", "Texas Southern", "The Citadel", "Towson", "UC Davis",
+    "UT Martin", "Villanova", "VMI", "Wagner", "Weber State",
+    "Western Carolina", "Western Illinois", "William & Mary", "Wofford", "Youngstown State"
 ]
 
 # Years for dropdown
