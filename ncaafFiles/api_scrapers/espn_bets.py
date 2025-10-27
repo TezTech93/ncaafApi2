@@ -177,18 +177,14 @@ def get_all_ncaaf_gamelines():
         "last_updated": datetime.now().isoformat()
     }
 
-# Example usage with error handling
-if __name__ == "__main__":
-    # Test the NCAAF data fetching with error handling
-    try:
-        ncaaf_games = get_espn_bets_gamelines()
-        if ncaaf_games:
-            print(f"Successfully fetched {len(ncaaf_games)} NCAAF games")
-            for game in ncaaf_games:
-                print(f"{game['away']} @ {game['home']} - Spread: {game['home_spread']} | Total: {game['total']}")
-        else:
-            print("No NCAAF games found")
-    except Exception as e:
-        print(f"Error testing NCAAF scraper: {e}")
-        # Return empty list as fallback
-        print("Returning empty game list as fallback")
+ncaaf_games = get_espn_bets_gamelines()
+if ncaaf_games:
+    print(f"Successfully fetched {len(ncaaf_games)} NCAAF games")
+    for game in ncaaf_games:
+        print(f"{game['away']} @ {game['home']} - Spread: {game['home_spread']} | Total: {game['total']}")
+else:
+    print("No NCAAF games found")
+except Exception as e:
+print(f"Error testing NCAAF scraper: {e}")
+# Return empty list as fallback
+print("Returning empty game list as fallback")
