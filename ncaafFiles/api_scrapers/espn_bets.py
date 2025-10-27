@@ -15,9 +15,9 @@ error_codes = [500, 403, 404]
 
 espn_api_successful = False
 
-def get_espn_bets_gamelines():
-    logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
+def get_espn_bets_gamelines():
     url = "https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard"
 
     try:
