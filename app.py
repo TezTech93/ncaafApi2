@@ -74,7 +74,29 @@ YEARS = [str(year) for year in range(2020, 2025)]
 
 @app.get("/ncaaf/gamelines")
 def get_lines():
-    return {"Gamelines": ncaaf_game_lines}
+    """Main gamelines endpoint"""
+    try:
+        # First try to get data from the database
+        manager = GamelineManager()
+        db_gamelines = manager.read_gamelines()
+        
+        if db_gamelines:
+            # Format the data to match what your frontend expects
+            formatted_gamelines = {
+                "manual": db_gamelines  # This puts all DB games under "manual" source
+            }
+            return {"Gamelines": formatted_gamelines}
+        else:
+            # Fallback to the original ncaaf_game_lines if database is empty
+            if 'ncaaf_game_lines' in globals() and ncaaf_game_lines:
+                return {"Gamelines": ncaaf_game_lines}
+            else:
+                return {"Gamelines": {"manual": []}}  # Return empty structure
+        
+    except Exception as e:
+        print(f"Error in /ncaaf/gamelines: {e}")
+        # Return empty but properly formatted response
+        return {"Gamelines": {"manual": []}}
 
 @app.get("/ncaaf/gamelines/manual", response_class=HTMLResponse)
 def manual_input_form():
