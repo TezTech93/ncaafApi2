@@ -369,6 +369,16 @@ def get_coach_stats(coach: str):
     """Placeholder for coach stats"""
     return {"message": "Coach stats endpoint - implementation pending"}
 
+@app.get("/ncaaf/db-check")
+def db_check():
+    try:
+        from ncaafGamelines import GamelineManager
+        manager = GamelineManager()
+        gamelines = manager.read_gamelines()
+        return {"db_gamelines": gamelines, "count": len(gamelines)}
+    except Exception as e:
+        return {"error": str(e)}
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
