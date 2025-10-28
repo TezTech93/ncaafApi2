@@ -74,9 +74,7 @@ YEARS = [str(year) for year in range(2020, 2025)]
 
 @app.get("/ncaaf/gamelines")
 def get_lines():
-    manager = GamelineManager()
-    ncaaf_gamelines = manager.read_gamelines()
-    return {"Gamelines": ncaaf_gamelines}
+    return {"Gamelines": ncaaf_game_lines}
 
 @app.get("/ncaaf/gamelines/manual", response_class=HTMLResponse)
 def manual_input_form():
