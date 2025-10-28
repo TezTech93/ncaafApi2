@@ -373,8 +373,3 @@ deleter = GamelineManager()
 deleter.delete_gamelines()
 
 ncaaf_game_lines = main()
-
-# Export for API use
-if __name__ == "__main__":
-    # This allows the file to be imported without running main()
-    pass
