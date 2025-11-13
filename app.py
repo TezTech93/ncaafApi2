@@ -6,7 +6,7 @@ import sys, os
 sys.path.append(os.path.dirname(__file__) + "/ncaafFiles/")
 from ncaafGamelines import *
 from ncaafGetData import get_team_stats, get_player_stats, ncaafdb
-from ncaafTeam import NcaafTeam  # Import the team class
+from ncaafTeams import NcaafTeam  # Import the team class
 
 app = FastAPI()
 
