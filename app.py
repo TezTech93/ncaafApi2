@@ -6,7 +6,8 @@ import sys, os
 sys.path.append(os.path.dirname(__file__) + "/ncaafFiles/")
 from ncaafGamelines import *
 from ncaafGetData import get_team_stats, get_player_stats, ncaafdb
-from ncaafTeams import NcaafTeam  # Import the team class
+from ncaafTeams import NcaafTeam
+from ncaafEvents import ncaaf_events_manager  # Import the events manager
 
 app = FastAPI()
 
@@ -19,55 +20,7 @@ app.add_middleware(
 )
 
 NCAAF_TEAMS = [
-    # FBS Schools (Bowl Subdivision)
-    "Air Force", "Akron", "Alabama", "Appalachian State", "Arizona", 
-    "Arizona State", "Arkansas", "Arkansas State", "Army", "Auburn",
-    "Ball State", "Baylor", "Boise State", "Boston College", "Bowling Green",
-    "Buffalo", "BYU", "California", "Central Michigan", "Charlotte",
-    "Cincinnati", "Clemson", "Coastal Carolina", "Colorado", "Colorado State",
-    "Connecticut", "Delaware", "Duke", "East Carolina", "Eastern Michigan",
-    "Florida", "Florida Atlantic", "Florida International", "Florida State", "Fresno State",
-    "Georgia", "Georgia Southern", "Georgia State", "Georgia Tech", "Hawaii",
-    "Houston", "Illinois", "Indiana", "Iowa", "Iowa State", "Jacksonville State",
-    "James Madison", "Kansas", "Kansas State", "Kennesaw State", "Kent State",
-    "Kentucky", "Liberty", "Louisiana", "Louisiana Monroe", "Louisiana Tech", "Louisville",
-    "LSU", "Marshall", "Maryland", "Memphis", "Miami (FL)",
-    "Miami (OH)", "Michigan", "Michigan State", "Middle Tennessee", "Minnesota",
-    "Mississippi State", "Missouri", "Missouri State", "Navy", "NC State",
-    "Nebraska", "Nevada", "New Mexico", "New Mexico State", "North Carolina",
-    "North Texas", "Northern Illinois", "Northwestern", "Notre Dame", "Ohio",
-    "Ohio State", "Oklahoma", "Oklahoma State", "Old Dominion", "Ole Miss",
-    "Oregon", "Oregon State", "Penn State", "Pittsburgh", "Purdue", "Rice",
-    "Rutgers", "Sam Houston", "San Diego State", "San Jose State", "SMU",
-    "South Alabama", "South Carolina", "South Florida", "Southern Miss", "Stanford",
-    "Syracuse", "TCU", "Temple", "Tennessee", "Texas",
-    "Texas A&M", "Texas State", "Texas Tech", "Toledo", "Troy",
-    "Tulane", "Tulsa", "UAB", "UCF", "UCLA",
-    "UMass", "UNLV", "USC", "Utah", "Utah State",
-    "UTEP", "UTSA", "Vanderbilt", "Virginia", "Virginia Tech",
-    "Wake Forest", "Washington", "Washington State", "West Virginia", "Western Kentucky",
-    "Western Michigan", "Wisconsin", "Wyoming",
-    
-    # FCS Schools (Championship Subdivision) playing FBS opponents in 2025[citation:2]
-    "Abilene Christian", "Alabama A&M", "Alabama State", "Albany", "Alcorn State",
-    "Austin Peay", "Bethune-Cookman", "Bryant", "Bucknell", "Cal Poly",
-    "Campbell", "Central Arkansas", "Central Connecticut State", "Charleston Southern", "Chattanooga",
-    "Colgate", "Delaware State", "Duquesne", "East Texas A&M", "Eastern Illinois",
-    "Eastern Kentucky", "Eastern Washington", "Elon", "ETSU", "Florida A&M",
-    "Fordham", "Furman", "Gardner-Webb", "Grambling State", "Holy Cross",
-    "Houston Christian", "Howard", "Idaho", "Idaho State", "Illinois State",
-    "Incarnate Word", "Indiana State", "Jackson State", "Lafayette", "Lamar",
-    "Lehigh", "LIU", "Lindenwood", "Maine", "McNeese",
-    "Mercer", "Merrimack", "Monmouth", "Morgan State", "Murray State",
-    "New Hampshire", "Nicholls", "Norfolk State", "North Alabama", "North Carolina A&T",
-    "North Carolina Central", "North Dakota", "Northern Arizona", "Northern Colorado", "Northern Iowa",
-    "Northwestern State", "Portland State", "Prairie View A&M", "Rhode Island", "Richmond",
-    "Robert Morris", "Sacramento State", "Saint Francis (PA)", "Samford", "Southeastern Louisiana",
-    "Southeast Missouri State", "South Carolina State", "South Dakota", "Southern", "Southern Illinois",
-    "Stony Brook", "Tarleton State", "Tennessee State", "Tennessee Tech", "Texas Southern",
-    "The Citadel", "Towson", "UC Davis", "UT Martin", "Villanova",
-    "VMI", "Wagner", "Weber State", "Western Carolina", "Western Illinois",
-    "William & Mary", "Wofford", "Youngstown State"
+    # ... (keep your existing team list)
 ]
 
 # Years for dropdown
@@ -91,8 +44,279 @@ def get_lines():
 
 @app.get("/ncaaf/gamelines/manual", response_class=HTMLResponse)
 def manual_input_form():
-    """Serve HTML form for manual NCAAF gameline input"""
-    html_content = f"""
+    """Serve HTML form for manual NCAAF gameline input with upcoming events"""
+    try:
+        # Get upcoming TBD events
+        upcoming_events = ncaaf_events_manager.get_upcoming_tbd_events(days=7)
+        
+        # Generate HTML for upcoming events
+        upcoming_events_html = ""
+        if upcoming_events:
+            for event in upcoming_events:
+                upcoming_events_html += f"""
+                <div class="upcoming-event-card">
+                    <div class="event-header">
+                        <h4>{event['away_team']} @ {event['home_team']}</h4>
+                        <span class="event-date">{event['game_day']} {event.get('start_time', '')}</span>
+                    </div>
+                    <form action="/ncaaf/gamelines/manual/quick" method="post" class="quick-gameline-form">
+                        <input type="hidden" name="source" value="manual">
+                        <input type="hidden" name="game_day" value="{event['game_day']}">
+                        <input type="hidden" name="start_time" value="{event.get('start_time', '')}">
+                        <input type="hidden" name="home_team" value="{event['home_team']}">
+                        <input type="hidden" name="away_team" value="{event['away_team']}">
+                        
+                        <div class="quick-odds-row">
+                            <div class="odds-group">
+                                <label>Home ML:</label>
+                                <input type="number" name="home_ml" placeholder="e.g., -150" value="">
+                            </div>
+                            <div class="odds-group">
+                                <label>Away ML:</label>
+                                <input type="number" name="away_ml" placeholder="e.g., +130" value="">
+                            </div>
+                        </div>
+                        
+                        <div class="quick-odds-row">
+                            <div class="odds-group">
+                                <label>Home Spread:</label>
+                                <input type="number" step="0.5" name="home_spread" placeholder="e.g., -3.5" value="">
+                            </div>
+                            <div class="odds-group">
+                                <label>Home Spread Odds:</label>
+                                <input type="number" name="home_spread_odds" placeholder="e.g., -110" value="">
+                            </div>
+                        </div>
+                        
+                        <div class="quick-odds-row">
+                            <div class="odds-group">
+                                <label>Away Spread:</label>
+                                <input type="number" step="0.5" name="away_spread" placeholder="e.g., +3.5" value="">
+                            </div>
+                            <div class="odds-group">
+                                <label>Away Spread Odds:</label>
+                                <input type="number" name="away_spread_odds" placeholder="e.g., -110" value="">
+                            </div>
+                        </div>
+                        
+                        <div class="quick-odds-row">
+                            <div class="odds-group">
+                                <label>Over/Under:</label>
+                                <input type="number" step="0.5" name="over_under" placeholder="e.g., 55.5" value="">
+                            </div>
+                            <div class="odds-group">
+                                <label>Over Odds:</label>
+                                <input type="number" name="over_odds" placeholder="e.g., -110" value="">
+                            </div>
+                            <div class="odds-group">
+                                <label>Under Odds:</label>
+                                <input type="number" name="under_odds" placeholder="e.g., -110" value="">
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="quick-submit-btn">Add Gameline</button>
+                    </form>
+                </div>
+                """
+        else:
+            upcoming_events_html = "<p>No upcoming games found. All scheduled games may already have gamelines.</p>"
+        
+        html_content = f"""
+        <html>
+        <head>
+            <title>NCAAF Manual Gameline Input</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                .formGrid {{ display: flex; flex-direction: column; gap: 20px; max-width: 1000px; }}
+                .dateTimeRow {{ display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }}
+                .teamRow {{ display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; }}
+                .form-group {{ margin-bottom: 15px; }}
+                label {{ display: block; margin-bottom: 5px; font-weight: bold; }}
+                input, select {{ padding: 8px; width: 100%; box-sizing: border-box; }}
+                button {{ padding: 12px 24px; background: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; }}
+                button:hover {{ background: #0056b3; }}
+                .card {{ border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin-bottom: 20px; }}
+                
+                /* Upcoming Events Styles */
+                .upcoming-events-section {{ margin-top: 40px; }}
+                .upcoming-event-card {{
+                    border: 2px solid #e0e0e0;
+                    padding: 15px;
+                    margin-bottom: 15px;
+                    border-radius: 8px;
+                    background: #f9f9f9;
+                }}
+                .event-header {{
+                    display: flex;
+                    justify-content: between;
+                    align-items: center;
+                    margin-bottom: 15px;
+                    border-bottom: 1px solid #ddd;
+                    padding-bottom: 10px;
+                }}
+                .event-header h4 {{
+                    margin: 0;
+                    color: #333;
+                }}
+                .event-date {{
+                    color: #666;
+                    font-size: 0.9em;
+                }}
+                .quick-gameline-form {{
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                }}
+                .quick-odds-row {{
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 10px;
+                }}
+                .odds-group {{
+                    display: flex;
+                    flex-direction: column;
+                }}
+                .odds-group label {{
+                    font-size: 0.8em;
+                    color: #666;
+                    margin-bottom: 2px;
+                }}
+                .quick-submit-btn {{
+                    padding: 8px 16px;
+                    background: #28a745;
+                    color: white;
+                    border: none;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    margin-top: 10px;
+                }}
+                .quick-submit-btn:hover {{
+                    background: #218838;
+                }}
+                .section-title {{
+                    color: #333;
+                    border-bottom: 2px solid #007bff;
+                    padding-bottom: 10px;
+                    margin-bottom: 20px;
+                }}
+            </style>
+        </head>
+        <body>
+            <h2>NCAAF Manual Gameline Input</h2>
+            
+            <!-- Standard Manual Input Form -->
+            <div class="card">
+                <h3>Custom Gameline Input</h3>
+                <form action="/ncaaf/gamelines/manual" method="post">
+                    <div class="form-group">
+                        <label for="source">Source:</label>
+                        <select id="source" name="source" required>
+                            <option value="manual">Manual</option>
+                            <option value="draftkings">DraftKings</option>
+                            <option value="fanduel">FanDuel</option>
+                            <option value="espn_bets">ESPN Bets</option>
+                        </select>
+                    </div>
+
+                    <div class="dateTimeRow">
+                        <div class="form-group">
+                            <label for="game_day">Game Date:</label>
+                            <input type="date" id="game_day" name="game_day" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="start_time">Start Time:</label>
+                            <input type="time" id="start_time" name="start_time">
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h4>Away Team</h4>
+                        <div class="teamRow">
+                            <div class="form-group">
+                                <label for="away_team">Away Team:</label>
+                                <select id="away_team" name="away_team" required>
+                                    <option value="">Select Away Team</option>
+                                    {"".join([f'<option value="{team}">{team}</option>' for team in NCAAF_TEAMS])}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="away_ml">Away ML:</label>
+                                <input type="number" id="away_ml" name="away_ml" placeholder="e.g., +150">
+                            </div>
+                            <div class="form-group">
+                                <label for="away_spread">Away Spread:</label>
+                                <input type="number" step="0.5" id="away_spread" name="away_spread" placeholder="e.g., +7.5">
+                            </div>
+                            <div class="form-group">
+                                <label for="away_spread_odds">Spread Odds:</label>
+                                <input type="number" id="away_spread_odds" name="away_spread_odds" placeholder="e.g., -110">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h4>Home Team</h4>
+                        <div class="teamRow">
+                            <div class="form-group">
+                                <label for="home_team">Home Team:</label>
+                                <select id="home_team" name="home_team" required>
+                                    <option value="">Select Home Team</option>
+                                    {"".join([f'<option value="{team}">{team}</option>' for team in NCAAF_TEAMS])}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="home_ml">Home ML:</label>
+                                <input type="number" id="home_ml" name="home_ml" placeholder="e.g., -170">
+                            </div>
+                            <div class="form-group">
+                                <label for="home_spread">Home Spread:</label>
+                                <input type="number" step="0.5" id="home_spread" name="home_spread" placeholder="e.g., -7.5">
+                            </div>
+                            <div class="form-group">
+                                <label for="home_spread_odds">Spread Odds:</label>
+                                <input type="number" id="home_spread_odds" name="home_spread_odds" placeholder="e.g., -110">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="form-group">
+                            <label for="over_under">Over/Under:</label>
+                            <input type="number" step="0.5" id="over_under" name="over_under" placeholder="e.g., 55.5">
+                        </div>
+                        <div class="form-group">
+                            <label for="over_odds">Over Odds:</label>
+                            <input type="number" id="over_odds" name="over_odds" placeholder="e.g., -110">
+                        </div>
+                        <div class="form-group">
+                            <label for="under_odds">Under Odds:</label>
+                            <input type="number" id="under_odds" name="under_odds" placeholder="e.g., -110">
+                        </div>
+                    </div>
+
+                    <button type="submit">Submit Custom Gameline</button>
+                </form>
+            </div>
+
+            <!-- Upcoming Events Section -->
+            <div class="upcoming-events-section">
+                <h3 class="section-title">Upcoming Games (No Gamelines Yet)</h3>
+                <p>Quickly add gamelines to scheduled games:</p>
+                {upcoming_events_html}
+            </div>
+        </body>
+        </html>
+        """
+        return HTMLResponse(content=html_content)
+        
+    except Exception as e:
+        logger.error(f"Error generating manual form: {e}")
+        # Fallback to basic form if events manager fails
+        return HTMLResponse(content=generate_basic_form())
+
+def generate_basic_form():
+    """Generate basic form without events if manager fails"""
+    return f"""
     <html>
     <head>
         <title>NCAAF Manual Gameline Input</title>
@@ -112,12 +336,84 @@ def manual_input_form():
     <body>
         <h2>NCAAF Manual Gameline Input</h2>
         <form action="/ncaaf/gamelines/manual" method="post">
-            <!-- ... (keep your existing form HTML) ... -->
+            <!-- ... (same as your original form) ... -->
         </form>
     </body>
     </html>
     """
-    return HTMLResponse(content=html_content)
+
+@app.post("/ncaaf/gamelines/manual/quick")
+async def submit_quick_gameline(
+    source: str = Form(...),
+    home_team: str = Form(...),
+    away_team: str = Form(...),
+    game_day: str = Form(...),
+    start_time: str = Form(None),
+    home_ml: int = Form(None),
+    away_ml: int = Form(None),
+    home_spread: float = Form(None),
+    away_spread: float = Form(None),
+    home_spread_odds: int = Form(None),
+    away_spread_odds: int = Form(None),
+    over_under: float = Form(None),
+    over_odds: int = Form(None),
+    under_odds: int = Form(None)
+):
+    """Handle quick gameline submission from upcoming events"""
+    try:
+        game_data = {
+            'home': home_team,
+            'away': away_team,
+            'game_day': game_day,
+            'start_time': start_time,
+            'home_ml': home_ml,
+            'away_ml': away_ml,
+            'home_spread': home_spread,
+            'away_spread': away_spread,
+            'home_spread_odds': home_spread_odds,
+            'away_spread_odds': away_spread_odds,
+            'over_under': over_under,
+            'over_odds': over_odds,
+            'under_odds': under_odds
+        }
+
+        manager = GamelineManager()
+        manager.update_gameline(source, game_data)
+        
+        return {
+            "status": "success",
+            "message": f"Quick gameline added for {away_team} @ {home_team}",
+            "redirect": "/ncaaf/gamelines/manual"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error submitting quick gameline: {str(e)}")
+
+# Add events management endpoints
+@app.get("/ncaaf/events/update")
+def update_ncaaf_events(days: int = 7, use_gamelines: bool = False):
+    """Update NCAAF events with schedule data"""
+    try:
+        updated_count = ncaaf_events_manager.update_events(days, use_gamelines)
+        return {
+            "status": "success", 
+            "sport": "ncaaf",
+            "events_updated": updated_count,
+            "use_gamelines": use_gamelines
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/ncaaf/events/upcoming")
+def get_upcoming_events(days: int = 7):
+    """Get upcoming TBD events"""
+    try:
+        events = ncaaf_events_manager.get_upcoming_tbd_events(days)
+        return {"sport": "ncaaf", "upcoming_events": events}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ... (keep all your existing endpoints below)
 
 @app.post("/ncaaf/gamelines/manual")
 async def submit_manual_gameline(
