@@ -464,6 +464,52 @@ class NCAAFEventsManager:
         }
         
         return team_mappings.get(team_name, team_name)
+
+    def get_upcoming_tbd_events(self, days: int = 7) -> List[Dict]:
+    """Get upcoming TBD events that don't have gamelines yet"""
+        try:
+            # Get all scheduled games
+            scheduled_games = self.get_schedule(days)
+            
+            # Get existing gamelines to filter out games that already have odds
+            existing_gamelines = self.get_existing_gamelines(days)
+            
+            # Create set of games that already have gamelines
+            existing_games_set = set()
+            for gameline in existing_gamelines:
+                game_key = (gameline['game_day'], gameline['home_team'], gameline['away_team'])
+                existing_games_set.add(game_key)
+            
+            # Filter scheduled games to only include those without gamelines
+            tbd_events = []
+            for game in scheduled_games:
+                game_key = (game['game_day'], game['home_team'], game['away_team'])
+                if game_key not in existing_games_set:
+                    tbd_event = {
+                        'game_day': game['game_day'],
+                        'start_time': game.get('start_time', 'TBD'),
+                        'home_team': game['home_team'],
+                        'away_team': game['away_team'],
+                        'home_ml': '',
+                        'away_ml': '',
+                        'home_spread': '',
+                        'away_spread': '',
+                        'home_spread_odds': '',
+                        'away_spread_odds': '',
+                        'over_under': '',
+                        'over_odds': '',
+                        'under_odds': '',
+                        'status': 'TBD',
+                        'source': game.get('source', 'schedule')
+                    }
+                    tbd_events.append(tbd_event)
+            
+            logger.info(f"Found {len(tbd_events)} TBD events without gamelines")
+            return tbd_events
+            
+        except Exception as e:
+            logger.error(f"Error getting TBD events: {e}")
+            return []
     
     def _clean_team_name(self, team_name: str) -> str:
         """Clean team name from ESPN (fallback)"""
