@@ -6,6 +6,7 @@ import logging
 from typing import List, Dict
 import re
 import time
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,513 @@ class NCAAFEventsManager:
         conn.commit()
         conn.close()
         logger.info("Integrated NCAAF events database initialized")
+
+    def scrape_espn_schedule_real(self, days: int = 7) -> List[Dict]:
+        """
+        Scrape real NCAAF schedule from ESPN with improved parsing
+        Targets the actual schedule structure used by ESPN
+        """
+        try:
+            games = []
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            
+            # Get current year and calculate weeks
+            current_year = dt.datetime.now().year
+            current_date = dt.datetime.now()
+            
+            # Try multiple weeks around current date
+            weeks_to_try = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+            
+            for week in weeks_to_try:
+                try:
+                    url = f"https://www.espn.com/college-football/schedule/_/week/{week}/year/{current_year}/seasontype/2"
+                    logger.info(f"Scraping ESPN week {week}, year {current_year}")
+                    
+                    time.sleep(1)  # Be respectful
+                    
+                    response = requests.get(url, headers=headers, timeout=15)
+                    if response.status_code != 200:
+                        continue
+                    
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    
+                    # Parse games from this week
+                    week_games = self._parse_espn_schedule_page(soup, week, current_year, days)
+                    games.extend(week_games)
+                    
+                    # If we found games and we're beyond current week, we can stop
+                    if week_games and week > self._get_current_week():
+                        break
+                        
+                except Exception as e:
+                    logger.debug(f"Error scraping ESPN week {week}: {e}")
+                    continue
+            
+            # Also try the main schedule page
+            try:
+                main_url = f"https://www.espn.com/college-football/schedule"
+                response = requests.get(main_url, headers=headers, timeout=15)
+                if response.status_code == 200:
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    main_games = self._parse_espn_main_schedule(soup, days)
+                    games.extend(main_games)
+            except Exception as e:
+                logger.debug(f"Error scraping ESPN main schedule: {e}")
+            
+            # Remove duplicates
+            unique_games = []
+            seen_games = set()
+            for game in games:
+                game_key = (game['game_day'], game['home_team'], game['away_team'])
+                if game_key not in seen_games:
+                    seen_games.add(game_key)
+                    unique_games.append(game)
+            
+            logger.info(f"Found {len(unique_games)} unique real games from ESPN")
+            return unique_games
+            
+        except Exception as e:
+            logger.error(f"Error scraping real ESPN schedule: {e}")
+            return []
+
+    def _parse_espn_schedule_page(self, soup: BeautifulSoup, week: int, year: int, days: int) -> List[Dict]:
+        """Parse ESPN schedule page for specific week"""
+        games = []
+        
+        try:
+            # Find schedule tables - ESPN uses tables with specific classes
+            schedule_tables = soup.find_all('table', class_='Table')
+            
+            for table in schedule_tables:
+                try:
+                    # Get the date from table context
+                    date_header = table.find_previous('div', class_='Table__Title')
+                    table_date = None
+                    
+                    if date_header:
+                        date_text = date_header.get_text().strip()
+                        table_date = self._parse_espn_date_from_text(date_text, week, year)
+                    
+                    if not table_date:
+                        # Default to calculating date from week
+                        table_date = self._calculate_date_from_week(week, year)
+                    
+                    # Skip if date is too far in the future
+                    if not self._is_within_days(table_date, days):
+                        continue
+                    
+                    # Parse game rows
+                    rows = table.find_all('tr', class_=lambda x: x and 'Table__TR' in x)
+                    
+                    for row in rows:
+                        try:
+                            # Skip header rows
+                            if not row.find('td'):
+                                continue
+                            
+                            game_data = self._parse_espn_game_row(row, table_date)
+                            if game_data and game_data['home_team'] and game_data['away_team']:
+                                games.append(game_data)
+                                
+                        except Exception as e:
+                            logger.debug(f"Error parsing ESPN game row: {e}")
+                            continue
+                            
+                except Exception as e:
+                    logger.debug(f"Error parsing ESPN schedule table: {e}")
+                    continue
+        
+        except Exception as e:
+            logger.error(f"Error parsing ESPN schedule page: {e}")
+        
+        return games
+
+    def _parse_espn_main_schedule(self, soup: BeautifulSoup, days: int) -> List[Dict]:
+        """Parse ESPN main schedule page"""
+        games = []
+        
+        try:
+            # Look for schedule containers
+            schedule_sections = soup.find_all('div', class_=lambda x: x and 'Schedule' in x)
+            
+            for section in schedule_sections:
+                try:
+                    # Extract date from section
+                    date_element = section.find(['h2', 'h3', 'div'], class_=lambda x: x and 'date' in str(x).lower())
+                    section_date = dt.date.today()
+                    
+                    if date_element:
+                        date_text = date_element.get_text().strip()
+                        section_date = self._parse_espn_date_from_text(date_text, 1, dt.datetime.now().year)
+                    
+                    # Find game elements
+                    game_elements = section.find_all('div', class_=lambda x: x and 'game' in str(x).lower())
+                    
+                    for game_elem in game_elements:
+                        try:
+                            teams = game_elem.find_all('span', class_=lambda x: x and 'team' in str(x).lower())
+                            if len(teams) >= 2:
+                                away_team = self._clean_team_name(teams[0].get_text().strip())
+                                home_team = self._clean_team_name(teams[1].get_text().strip())
+                                
+                                if away_team and home_team and self._is_within_days(section_date, days):
+                                    game_data = {
+                                        'game_day': section_date.strftime('%Y-%m-%d'),
+                                        'start_time': 'TBD',
+                                        'home_team': home_team,
+                                        'away_team': away_team,
+                                        'source': 'espn_main'
+                                    }
+                                    games.append(game_data)
+                        except Exception as e:
+                            logger.debug(f"Error parsing ESPN main schedule game: {e}")
+                            continue
+                            
+                except Exception as e:
+                    logger.debug(f"Error parsing ESPN main schedule section: {e}")
+                    continue
+        
+        except Exception as e:
+            logger.error(f"Error parsing ESPN main schedule: {e}")
+        
+        return games
+
+    def _parse_espn_game_row(self, row, game_date: dt.date) -> Dict:
+        """Parse individual game row from ESPN schedule"""
+        try:
+            cells = row.find_all(['td', 'th'])
+            if len(cells) < 3:
+                return {}
+            
+            # ESPN typically has: teams cell, time/network cell, etc.
+            teams_cell = cells[0]
+            time_network_cell = cells[1] if len(cells) > 1 else None
+            
+            # Extract teams - look for team links or spans
+            team_links = teams_cell.find_all('a', class_=lambda x: x and 'team' in str(x).lower())
+            team_spans = teams_cell.find_all('span', class_=lambda x: x and 'team' in str(x).lower())
+            
+            teams = []
+            if team_links:
+                teams = [link.get_text().strip() for link in team_links]
+            elif team_spans:
+                teams = [span.get_text().strip() for span in team_spans]
+            else:
+                # Fallback: split by @ symbol or just take text
+                cell_text = teams_cell.get_text().strip()
+                if '@' in cell_text:
+                    teams = [t.strip() for t in cell_text.split('@')]
+                else:
+                    # Assume it's just team names separated by space
+                    teams = [t.strip() for t in re.split(r'\s+', cell_text) if t.strip()]
+            
+            if len(teams) >= 2:
+                away_team = self._clean_team_name(teams[0])
+                home_team = self._clean_team_name(teams[1])
+                
+                # Extract time if available
+                start_time = 'TBD'
+                if time_network_cell:
+                    time_text = time_network_cell.get_text().strip()
+                    if time_text and any(x in time_text.lower() for x in ['am', 'pm', 'et', 'ct', 'pt']):
+                        start_time = time_text.split('\n')[0].strip()
+                
+                return {
+                    'game_day': game_date.strftime('%Y-%m-%d'),
+                    'start_time': start_time,
+                    'home_team': home_team,
+                    'away_team': away_team,
+                    'source': 'espn_weekly'
+                }
+        
+        except Exception as e:
+            logger.debug(f"Error parsing ESPN game row: {e}")
+        
+        return {}
+
+    def _parse_espn_date_from_text(self, date_text: str, week: int, year: int) -> dt.date:
+        """Parse date from ESPN date text"""
+        try:
+            # Common ESPN formats: "Saturday, November 22", "Sat, Nov 22", "November 22"
+            date_text = date_text.strip()
+            
+            # Remove day of week if present
+            if ',' in date_text:
+                parts = date_text.split(',', 1)
+                if len(parts) > 1:
+                    date_text = parts[1].strip()
+            
+            # Try different date formats
+            formats = [
+                '%B %d, %Y',
+                '%b %d, %Y', 
+                '%B %d',
+                '%b %d'
+            ]
+            
+            for fmt in formats:
+                try:
+                    parsed_date = dt.datetime.strptime(date_text, fmt).date()
+                    if parsed_date.year == 1900:
+                        parsed_date = parsed_date.replace(year=year)
+                    return parsed_date
+                except ValueError:
+                    continue
+            
+            # Fallback to week-based calculation
+            return self._calculate_date_from_week(week, year)
+            
+        except Exception as e:
+            logger.debug(f"Error parsing ESPN date '{date_text}': {e}")
+            return self._calculate_date_from_week(week, year)
+
+    def _calculate_date_from_week(self, week: int, year: int) -> dt.date:
+        """Calculate approximate date from week number"""
+        try:
+            # NCAAF season typically starts around late August
+            season_start = dt.date(year, 8, 20)  # Approximate season start
+            week_date = season_start + dt.timedelta(weeks=week-1)
+            return week_date
+        except:
+            return dt.date.today()
+
+    def _get_current_week(self) -> int:
+        """Get current week of NCAAF season"""
+        try:
+            # Simple calculation - season starts late August
+            season_start = dt.date(dt.datetime.now().year, 8, 20)
+            days_since_start = (dt.date.today() - season_start).days
+            return max(1, (days_since_start // 7) + 1)
+        except:
+            return 1
+
+    def scrape_cbssports_schedule(self, days: int = 7) -> List[Dict]:
+        """Alternative: Scrape from CBS Sports"""
+        try:
+            games = []
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            url = "https://www.cbssports.com/college-football/schedule/"
+            logger.info(f"Scraping CBS Sports schedule")
+            
+            response = requests.get(url, headers=headers, timeout=15)
+            if response.status_code != 200:
+                return []
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            # CBS Sports structure may vary, look for schedule elements
+            schedule_sections = soup.find_all('div', class_=lambda x: x and 'schedule' in str(x).lower())
+            
+            for section in schedule_sections:
+                try:
+                    # Extract date
+                    date_element = section.find(['h2', 'h3', 'strong'])
+                    section_date = dt.date.today()
+                    
+                    if date_element:
+                        date_text = date_element.get_text().strip()
+                        section_date = self._parse_generic_date(date_text)
+                    
+                    # Find game rows
+                    game_rows = section.find_all('tr', class_=lambda x: x and 'row' in str(x))
+                    
+                    for row in game_rows:
+                        try:
+                            teams = row.find_all('a', class_=lambda x: x and 'team' in str(x))
+                            if len(teams) >= 2:
+                                away_team = self._clean_team_name(teams[0].get_text().strip())
+                                home_team = self._clean_team_name(teams[1].get_text().strip())
+                                
+                                if away_team and home_team and self._is_within_days(section_date, days):
+                                    game_data = {
+                                        'game_day': section_date.strftime('%Y-%m-%d'),
+                                        'start_time': 'TBD', 
+                                        'home_team': home_team,
+                                        'away_team': away_team,
+                                        'source': 'cbssports'
+                                    }
+                                    games.append(game_data)
+                        except Exception as e:
+                            logger.debug(f"Error parsing CBS Sports game row: {e}")
+                            continue
+                            
+                except Exception as e:
+                    logger.debug(f"Error parsing CBS Sports section: {e}")
+                    continue
+            
+            logger.info(f"Found {len(games)} games from CBS Sports")
+            return games
+            
+        except Exception as e:
+            logger.error(f"Error scraping CBS Sports: {e}")
+            return []
+
+    def _parse_generic_date(self, date_text: str) -> dt.date:
+        """Parse generic date format"""
+        try:
+            formats = [
+                '%A, %B %d, %Y',
+                '%B %d, %Y',
+                '%b %d, %Y',
+                '%m/%d/%Y'
+            ]
+            
+            for fmt in formats:
+                try:
+                    return dt.datetime.strptime(date_text, fmt).date()
+                except ValueError:
+                    continue
+        except:
+            pass
+        return dt.date.today()
+
+    def get_real_schedule(self, days: int = 7) -> List[Dict]:
+        """
+        Main function to get real NCAAF schedule
+        Tries multiple sources to get actual games
+        """
+        logger.info(f"Getting real NCAAF schedule for next {days} days")
+        
+        games = []
+        
+        # Try ESPN first (most reliable)
+        espn_games = self.scrape_espn_schedule_real(days)
+        games.extend(espn_games)
+        
+        # If no games from ESPN, try CBS Sports
+        if not games:
+            logger.info("No games from ESPN, trying CBS Sports...")
+            cbs_games = self.scrape_cbssports_schedule(days)
+            games.extend(cbs_games)
+        
+        # If still no games, use the real Week 13 2025 schedule you provided
+        if not games:
+            logger.info("No games from web sources, using real 2025 Week 13 schedule")
+            games = self._get_real_2025_week13_schedule(days)
+        
+        # Remove duplicates
+        unique_games = []
+        seen_games = set()
+        for game in games:
+            game_key = (game['game_day'], game['home_team'], game['away_team'])
+            if game_key not in seen_games:
+                seen_games.add(game_key)
+                unique_games.append(game)
+        
+        logger.info(f"Found {len(unique_games)} real NCAAF games")
+        return unique_games
+
+    def _get_real_2025_week13_schedule(self, days: int = 7) -> List[Dict]:
+        """Get the real Week 13 2025 schedule you provided"""
+        games = []
+        
+        # Week 13 games for November 22, 2025
+        week13_games = [
+            # Format: (away_team, home_team, time)
+            ("Missouri", "Oklahoma", "11:00 AM CST"),
+            ("Samford", "Texas A&M", "11:00 AM CST"),
+            ("Louisville", "SMU", "11:00 AM CST"),
+            ("Rutgers", "Ohio St.", "11:00 AM CST"),
+            ("Miami (FL)", "Virginia Tech", "11:00 AM CST"),
+            ("Charlotte", "Georgia", "11:45 AM CST"),
+            ("Eastern Illinois", "Alabama", "1:00 PM CST"),
+            ("South Florida", "UAB", "2:00 PM CST"),
+            ("Arkansas", "Texas", "2:30 PM CST"),
+            ("Kentucky", "Vanderbilt", "2:30 PM CST"),
+            ("Michigan St.", "Iowa", "2:30 PM CST"),
+            ("Syracuse", "Notre Dame", "2:30 PM CST"),
+            ("USC", "Oregon", "2:30 PM CST"),
+            ("Kansas St.", "Utah", "3:00 PM CST"),
+        ]
+        
+        # Set game date to November 22, 2025
+        game_date = dt.date(2025, 11, 22)
+        
+        # Only include if within requested days
+        if self._is_within_days(game_date, days):
+            for away, home, time in week13_games:
+                games.append({
+                    'game_day': game_date.strftime('%Y-%m-%d'),
+                    'start_time': time,
+                    'home_team': self._clean_team_name(home),
+                    'away_team': self._clean_team_name(away),
+                    'source': 'real_2025_week13'
+                })
+        
+        return games
+
+    def _is_within_days(self, date: dt.date, days: int) -> bool:
+        """Check if date is within the next X days"""
+        today = dt.date.today()
+        end_date = today + dt.timedelta(days=days)
+        return today <= date <= end_date
+
+    def _clean_team_name(self, team_name: str) -> str:
+        """Clean and standardize team names"""
+        if not team_name:
+            return ""
+        
+        # Remove rankings like "11" from "11 Oklahoma"
+        team_name = re.sub(r'^\d+\s+', '', team_name)
+        
+        # Standardize common team name variations
+        team_mappings = {
+            'Ohio St.': 'Ohio State',
+            'Miami (FL)': 'Miami',
+            'Michigan St.': 'Michigan State',
+            'Kansas St.': 'Kansas State',
+            'Notre Dame': 'Notre Dame',
+            'Alabama': 'Alabama',
+            'Georgia': 'Georgia',
+            'Texas': 'Texas',
+            'Oklahoma': 'Oklahoma',
+            'USC': 'USC',
+            'Oregon': 'Oregon',
+            'LSU': 'LSU',
+            'Michigan': 'Michigan',
+            'Penn State': 'Penn State',
+            'Florida State': 'Florida State',
+            'Clemson': 'Clemson',
+            'Tennessee': 'Tennessee',
+            'Texas A&M': 'Texas A&M',
+            'Utah': 'Utah',
+            'Iowa': 'Iowa',
+            'Wisconsin': 'Wisconsin',
+            'Auburn': 'Auburn',
+            'Florida': 'Florida',
+            'Washington': 'Washington',
+            'UCLA': 'UCLA',
+            'Arkansas': 'Arkansas',
+            'Kentucky': 'Kentucky',
+            'Vanderbilt': 'Vanderbilt',
+            'Syracuse': 'Syracuse',
+            'Rutgers': 'Rutgers',
+            'Louisville': 'Louisville',
+            'SMU': 'SMU',
+            'Virginia Tech': 'Virginia Tech',
+            'Charlotte': 'Charlotte',
+            'South Florida': 'South Florida',
+            'UAB': 'UAB',
+            'Eastern Illinois': 'Eastern Illinois',
+            'Samford': 'Samford',
+            'Missouri': 'Missouri',
+        }
+        
+        return team_mappings.get(team_name, team_name)
+
+    # UPDATE YOUR EXISTING get_schedule METHOD TO USE REAL GAMES:
+    def get_schedule(self, days: int = 7) -> List[Dict]:
+        """Get NCAAF schedule - uses real games instead of mock data"""
+        return self.get_real_schedule(days)
+
+    # KEEP ALL YOUR EXISTING DATABASE METHODS (they remain the same):
+    # get_existing_gamelines, update_events, _create_tbd_events, _merge_events,
+    # _update_database, get_events, cleanup_old_events, etc.
     
     def scrape_fbschedules(self, days: int = 7) -> List[Dict]:
         """Scrape NCAAF schedule from FBSchedules.com with improved parsing"""
