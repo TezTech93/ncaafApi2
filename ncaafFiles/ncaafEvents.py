@@ -466,7 +466,6 @@ class NCAAFEventsManager:
         return team_mappings.get(team_name, team_name)
 
     def get_upcoming_tbd_events(self, days: int = 7) -> List[Dict]:
-    """Get upcoming TBD events that don't have gamelines yet"""
         try:
             # Get all scheduled games
             scheduled_games = self.get_schedule(days)
@@ -515,5 +514,4 @@ class NCAAFEventsManager:
         """Clean team name from ESPN (fallback)"""
         return team_name
 
-# Global instance
 ncaaf_events_manager = NCAAFEventsManager()
