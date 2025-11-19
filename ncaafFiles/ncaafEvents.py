@@ -909,7 +909,7 @@ class NCAAFEventsManager:
         # If still no games, create some sample data for testing
         if not games:
             logger.warning("No games found from any source, using sample data")
-            games = self._get_sample_games(days)
+            games = self. _get_real_2025_week13_schedule(days)
         
         logger.info(f"Total games found: {len(games)}")
         return games
