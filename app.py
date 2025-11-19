@@ -7,7 +7,7 @@ sys.path.append(os.path.dirname(__file__) + "/ncaafFiles/")
 from ncaafGamelines import *
 from ncaafGetData import get_team_stats, get_player_stats, ncaafdb
 from ncaafTeams import NcaafTeam
-from ncaafEvents import ncaaf_events_manager  # Import the events manager
+from ncaafEvents import ncaaf_events_manager
 
 app = FastAPI()
 
@@ -19,12 +19,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# COMPREHENSIVE NCAAF TEAMS LIST - UPDATED
 NCAAF_TEAMS = [
-    # ... (keep your existing team list)
+    "Alabama", "Ohio State", "Georgia", "Michigan", "Clemson", "Texas", "Oklahoma",
+    "Notre Dame", "LSU", "USC", "Penn State", "Florida State", "Oregon", "Texas A&M",
+    "Tennessee", "Utah", "Washington", "Miami", "Wisconsin", "Auburn", "Florida",
+    "Michigan State", "Iowa", "Oklahoma State", "Arkansas", "Kentucky", "UCLA",
+    "North Carolina", "Baylor", "Mississippi", "Kansas State", "TCU", "Pittsburgh",
+    "Louisville", "NC State", "Texas Tech", "South Carolina", "West Virginia",
+    "Stanford", "Boise State", "Cincinnati", "Houston", "UCF", "BYU", "San Diego State",
+    "Fresno State", "Appalachian State", "Coastal Carolina", "Liberty", "Army", "Navy",
+    "Air Force", "Tulane", "Memphis", "SMU", "East Carolina", "Tulsa", "Temple",
+    "South Florida", "Connecticut", "Massachusetts", "Old Dominion", "Charlotte",
+    "Florida Atlantic", "Florida International", "Marshall", "Western Kentucky",
+    "Middle Tennessee", "Louisiana Tech", "Rice", "UTSA", "North Texas", "UTEP",
+    "Southern Miss", "Arkansas State", "Louisiana", "Louisiana-Monroe", "Troy",
+    "South Alabama", "Georgia State", "Georgia Southern", "James Madison",
+    "Jacksonville State", "Sam Houston", "Kennesaw State", "Delaware", "Missouri",
+    "Vanderbilt", "Mississippi State", "South Carolina", "Kentucky", "Arkansas",
+    "Arizona", "Arizona State", "Colorado", "Utah", "UCLA", "USC", "California",
+    "Stanford", "Oregon", "Oregon State", "Washington", "Washington State",
+    "Illinois", "Indiana", "Iowa", "Maryland", "Michigan", "Michigan State",
+    "Minnesota", "Nebraska", "Northwestern", "Ohio State", "Penn State",
+    "Purdue", "Rutgers", "Wisconsin", "Boston College", "Clemson", "Duke",
+    "Florida State", "Georgia Tech", "Louisville", "Miami", "NC State",
+    "North Carolina", "Pittsburgh", "Syracuse", "Virginia", "Virginia Tech",
+    "Wake Forest", "Baylor", "Iowa State", "Kansas", "Kansas State",
+    "Oklahoma", "Oklahoma State", "TCU", "Texas", "Texas Tech", "West Virginia",
+    "UAB", "UTEP", "New Mexico State", "Samford", "Eastern Illinois", "Charlotte"
 ]
 
+# Remove duplicates and sort
+NCAAF_TEAMS = sorted(list(set(NCAAF_TEAMS)))
+
 # Years for dropdown
-YEARS = [str(year) for year in range(2020, 2025)]
+YEARS = [str(year) for year in range(2020, 2026)]  # Extended to 2025
 
 @app.get("/ncaaf/gamelines")
 def get_lines():
@@ -46,7 +75,7 @@ def get_lines():
 def manual_input_form():
     """Serve HTML form for manual NCAAF gameline input with upcoming events"""
     try:
-        # Get upcoming TBD events
+        # Get upcoming TBD events - THIS WILL NOW SHOW REAL GAMES
         upcoming_events = ncaaf_events_manager.get_upcoming_tbd_events(days=7)
         
         # Generate HTML for upcoming events
@@ -148,7 +177,7 @@ def manual_input_form():
                 }}
                 .event-header {{
                     display: flex;
-                    justify-content: between;
+                    justify-content: space-between;
                     align-items: center;
                     margin-bottom: 15px;
                     border-bottom: 1px solid #ddd;
@@ -203,6 +232,12 @@ def manual_input_form():
         </head>
         <body>
             <h2>NCAAF Manual Gameline Input</h2>
+            
+            <!-- Update Events Button -->
+            <div style="margin-bottom: 20px;">
+                <button onclick="updateEvents()" style="background: #6c757d;">Update Events from Schedule</button>
+                <span id="update-status" style="margin-left: 10px;"></span>
+            </div>
             
             <!-- Standard Manual Input Form -->
             <div class="card">
@@ -304,6 +339,29 @@ def manual_input_form():
                 <p>Quickly add gamelines to scheduled games:</p>
                 {upcoming_events_html}
             </div>
+
+            <script>
+                function updateEvents() {{
+                    const statusElement = document.getElementById('update-status');
+                    statusElement.innerHTML = 'Updating events...';
+                    
+                    fetch('/ncaaf/events/update?days=7&use_gamelines=false')
+                        .then(response => response.json())
+                        .then(data => {{
+                            if (data.status === 'success') {{
+                                statusElement.innerHTML = `✅ Updated ${{data.events_updated}} events`;
+                                // Reload the page to show new events
+                                setTimeout(() => location.reload(), 1000);
+                            }} else {{
+                                statusElement.innerHTML = '❌ Failed to update events';
+                            }}
+                        }})
+                        .catch(error => {{
+                            statusElement.innerHTML = '❌ Error updating events';
+                            console.error('Error:', error);
+                        }});
+                }}
+            </script>
         </body>
         </html>
         """
@@ -311,7 +369,6 @@ def manual_input_form():
         
     except Exception as e:
         logger.error(f"Error generating manual form: {e}")
-        # Fallback to basic form if events manager fails
         return HTMLResponse(content=generate_basic_form())
 
 def generate_basic_form():
