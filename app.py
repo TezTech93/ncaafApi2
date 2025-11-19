@@ -688,6 +688,385 @@ def scrape_team_data(team: str, year: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Add these new routes to your existing app.py
+
+@app.get("/ncaaf/events/manual", response_class=HTMLResponse)
+def manual_events_form():
+    """Serve HTML form for manual NCAAF events input"""
+    html_content = f"""
+    <html>
+    <head>
+        <title>Manual NCAAF Events Input</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            .form-container {{ max-width: 800px; }}
+            .form-group {{ margin-bottom: 15px; }}
+            label {{ display: block; margin-bottom: 5px; font-weight: bold; }}
+            input, select {{ padding: 8px; width: 100%; box-sizing: border-box; }}
+            button {{ padding: 12px 24px; background: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; margin-right: 10px; }}
+            button:hover {{ background: #0056b3; }}
+            .game-row {{ border: 1px solid #ddd; padding: 15px; margin-bottom: 15px; border-radius: 5px; }}
+            .add-game-btn {{ background: #28a745; }}
+            .add-game-btn:hover {{ background: #218838; }}
+            .remove-game-btn {{ background: #dc3545; }}
+            .remove-game-btn:hover {{ background: #c82333; }}
+        </style>
+    </head>
+    <body>
+        <h2>Manual NCAAF Events Input</h2>
+        
+        <div class="form-container">
+            <form id="eventsForm">
+                <div id="gamesContainer">
+                    <div class="game-row">
+                        <div class="form-group">
+                            <label>Game Date:</label>
+                            <input type="date" name="game_day" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Start Time:</label>
+                            <input type="time" name="start_time">
+                        </div>
+                        <div class="form-group">
+                            <label>Away Team:</label>
+                            <select name="away_team" required>
+                                <option value="">Select Away Team</option>
+                                {"".join([f'<option value="{team}">{team}</option>' for team in NCAAF_TEAMS])}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Home Team:</label>
+                            <select name="home_team" required>
+                                <option value="">Select Home Team</option>
+                                {"".join([f'<option value="{team}">{team}</option>' for team in NCAAF_TEAMS])}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Source:</label>
+                            <select name="source">
+                                <option value="manual">Manual</option>
+                                <option value="schedule">Schedule</option>
+                                <option value="espn">ESPN</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <button type="button" class="add-game-btn" onclick="addGameRow()">Add Another Game</button>
+                <button type="submit">Submit Events</button>
+            </form>
+            
+            <div id="result" style="margin-top: 20px;"></div>
+        </div>
+
+        <script>
+            let gameCount = 1;
+            
+            function addGameRow() {{
+                gameCount++;
+                const gamesContainer = document.getElementById('gamesContainer');
+                const newGameRow = document.createElement('div');
+                newGameRow.className = 'game-row';
+                newGameRow.innerHTML = `
+                    <div class="form-group">
+                        <label>Game Date:</label>
+                        <input type="date" name="game_day" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Start Time:</label>
+                        <input type="time" name="start_time">
+                    </div>
+                    <div class="form-group">
+                        <label>Away Team:</label>
+                        <select name="away_team" required>
+                            <option value="">Select Away Team</option>
+                            {"".join([f'<option value="{team}">{team}</option>' for team in NCAAF_TEAMS])}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Home Team:</label>
+                        <select name="home_team" required>
+                            <option value="">Select Home Team</option>
+                            {"".join([f'<option value="{team}">{team}</option>' for team in NCAAF_TEAMS])}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Source:</label>
+                        <select name="source">
+                            <option value="manual">Manual</option>
+                            <option value="schedule">Schedule</option>
+                            <option value="espn">ESPN</option>
+                        </select>
+                    </div>
+                    <button type="button" class="remove-game-btn" onclick="this.parentElement.remove()">Remove Game</button>
+                `;
+                gamesContainer.appendChild(newGameRow);
+            }}
+            
+            document.getElementById('eventsForm').onsubmit = async function(e) {{
+                e.preventDefault();
+                const formData = new FormData(this);
+                
+                // Collect all games
+                const games = [];
+                const gameRows = document.querySelectorAll('.game-row');
+                
+                gameRows.forEach(row => {{
+                    const inputs = row.querySelectorAll('input, select');
+                    const gameData = {{}};
+                    inputs.forEach(input => {{
+                        if (input.name) {{
+                            if (input.name in gameData) {{
+                                // Handle multiple values by converting to array
+                                if (!Array.isArray(gameData[input.name])) {{
+                                    gameData[input.name] = [gameData[input.name]];
+                                }}
+                                gameData[input.name].push(input.value);
+                            }} else {{
+                                gameData[input.name] = input.value;
+                            }}
+                        }}
+                    }});
+                    games.push(gameData);
+                }});
+                
+                try {{
+                    const response = await fetch('/ncaaf/events/manual/dumps', {{
+                        method: 'POST',
+                        headers: {{
+                            'Content-Type': 'application/json',
+                        }},
+                        body: JSON.stringify({{ games: games }})
+                    }});
+                    
+                    const result = await response.json();
+                    document.getElementById('result').innerHTML = 
+                        `<p style="color: green;">✅ ${{result.message}}</p>`;
+                        
+                }} catch (error) {{
+                    document.getElementById('result').innerHTML = 
+                        `<p style="color: red;">❌ Error: ${{error}}</p>`;
+                }}
+            }};
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+@app.post("/ncaaf/events/manual/dumps")
+async def bulk_events_dump(data: dict):
+    """Bulk dump events from Python list"""
+    try:
+        games = data.get('games', [])
+        if not games:
+            raise HTTPException(status_code=400, detail="No games provided")
+        
+        # Convert to events format and update database
+        events = []
+        for game in games:
+            event = {
+                'game_day': game.get('game_day'),
+                'start_time': game.get('start_time', 'TBD'),
+                'home_team': game.get('home_team'),
+                'away_team': game.get('away_team'),
+                'home_ml': '---',
+                'away_ml': '---',
+                'home_spread': '---',
+                'away_spread': '---',
+                'home_spread_odds': '---',
+                'away_spread_odds': '---',
+                'over_under': '---',
+                'over_odds': '---',
+                'under_odds': '---',
+                'status': 'TBD',
+                'source': game.get('source', 'manual_dump')
+            }
+            events.append(event)
+        
+        # Update database
+        updated_count = ncaaf_events_manager._update_database(events)
+        
+        return {
+            "status": "success",
+            "message": f"Successfully added {updated_count} events to database",
+            "events_added": updated_count
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing bulk events dump: {str(e)}")
+
+@app.get("/ncaaf/gamelines/manual/dumps", response_class=HTMLResponse)
+def gamelines_dump_form():
+    """Serve HTML form for bulk gamelines dump"""
+    html_content = f"""
+    <html>
+    <head>
+        <title>Bulk NCAAF Gamelines Dump</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            .form-container {{ max-width: 1000px; }}
+            .form-group {{ margin-bottom: 15px; }}
+            label {{ display: block; margin-bottom: 5px; font-weight: bold; }}
+            textarea {{ width: 100%; height: 300px; padding: 10px; font-family: monospace; }}
+            button {{ padding: 12px 24px; background: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; }}
+            button:hover {{ background: #0056b3; }}
+            .example {{ background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
+            .code {{ font-family: monospace; background: #e9ecef; padding: 10px; }}
+        </style>
+    </head>
+    <body>
+        <h2>Bulk NCAAF Gamelines Dump</h2>
+        
+        <div class="form-container">
+            <div class="example">
+                <h3>Example Python List Format:</h3>
+                <div class="code">
+gamelines = [<br>
+&nbsp;&nbsp;{{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"source": "draftkings",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"game_day": "2025-11-22",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"start_time": "14:30",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_team": "Ohio State",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_team": "Michigan",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_ml": -150,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_ml": 130,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_spread": -3.5,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_spread": 3.5,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_spread_odds": -110,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_spread_odds": -110,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"over_under": 55.5,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"over_odds": -110,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"under_odds": -110<br>
+&nbsp;&nbsp;}},<br>
+&nbsp;&nbsp;{{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"source": "fanduel",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"game_day": "2025-11-22",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"start_time": "15:00",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_team": "Alabama",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_team": "Auburn",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_ml": -200,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_ml": 170,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_spread": -6.5,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_spread": 6.5,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_spread_odds": -115,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_spread_odds": -105,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"over_under": 48.5,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"over_odds": -110,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"under_odds": -110<br>
+&nbsp;&nbsp;}}<br>
+]
+                </div>
+            </div>
+            
+            <form id="gamelinesDumpForm">
+                <div class="form-group">
+                    <label for="gamelinesData">Paste your Python list of gamelines:</label>
+                    <textarea id="gamelinesData" name="gamelines_data" placeholder="Paste your Python list here..."></textarea>
+                </div>
+                
+                <button type="submit">Submit Bulk Gamelines</button>
+            </form>
+            
+            <div id="result" style="margin-top: 20px;"></div>
+        </div>
+
+        <script>
+            document.getElementById('gamelinesDumpForm').onsubmit = async function(e) {{
+                e.preventDefault();
+                const gamelinesData = document.getElementById('gamelinesData').value;
+                
+                if (!gamelinesData.trim()) {{
+                    document.getElementById('result').innerHTML = 
+                        '<p style="color: red;">❌ Please provide gamelines data</p>';
+                    return;
+                }}
+                
+                try {{
+                    // Try to parse as JSON first, if not assume it's Python literal
+                    let gamelines;
+                    try {{
+                        gamelines = JSON.parse(gamelinesData);
+                    }} catch (jsonError) {{
+                        // If JSON fails, try to evaluate as Python literal (basic conversion)
+                        const cleanedData = gamelinesData
+                            .replace(/'/g, '"')
+                            .replace(/None/g, 'null')
+                            .replace(/True/g, 'true')
+                            .replace(/False/g, 'false');
+                        gamelines = JSON.parse(cleanedData);
+                    }}
+                    
+                    const response = await fetch('/ncaaf/gamelines/manual/dumps', {{
+                        method: 'POST',
+                        headers: {{
+                            'Content-Type': 'application/json',
+                        }},
+                        body: JSON.stringify({{ gamelines: gamelines }})
+                    }});
+                    
+                    const result = await response.json();
+                    document.getElementById('result').innerHTML = 
+                        `<p style="color: green;">✅ ${{result.message}}</p>`;
+                        
+                }} catch (error) {{
+                    document.getElementById('result').innerHTML = 
+                        `<p style="color: red;">❌ Error parsing data: ${{error}}</p>`;
+                }}
+            }};
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+@app.post("/ncaaf/gamelines/manual/dumps")
+async def bulk_gamelines_dump(data: dict):
+    """Bulk dump gamelines from Python list"""
+    try:
+        gamelines = data.get('gamelines', [])
+        if not gamelines:
+            raise HTTPException(status_code=400, detail="No gamelines provided")
+        
+        manager = GamelineManager()
+        success_count = 0
+        
+        for gameline in gamelines:
+            try:
+                game_data = {
+                    'home': gameline.get('home_team'),
+                    'away': gameline.get('away_team'),
+                    'game_day': gameline.get('game_day'),
+                    'start_time': gameline.get('start_time'),
+                    'home_ml': gameline.get('home_ml'),
+                    'away_ml': gameline.get('away_ml'),
+                    'home_spread': gameline.get('home_spread'),
+                    'away_spread': gameline.get('away_spread'),
+                    'home_spread_odds': gameline.get('home_spread_odds'),
+                    'away_spread_odds': gameline.get('away_spread_odds'),
+                    'over_under': gameline.get('over_under'),
+                    'over_odds': gameline.get('over_odds'),
+                    'under_odds': gameline.get('under_odds')
+                }
+                
+                source = gameline.get('source', 'manual_dump')
+                manager.update_gameline(source, game_data)
+                success_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing gameline {gameline}: {e}")
+                continue
+        
+        return {
+            "status": "success",
+            "message": f"Successfully added {success_count} gamelines to database",
+            "gamelines_added": success_count,
+            "total_processed": len(gamelines)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing bulk gamelines dump: {str(e)}")
+
 # Keep your existing player and coach endpoints
 @app.get("/ncaaf/player-stats", response_class=HTMLResponse)
 def player_select_form():
