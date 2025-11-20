@@ -399,6 +399,82 @@ def generate_basic_form():
     </html>
     """
 
+@app.post("/ncaaf/gamelines/manual/dumps")
+async def bulk_gamelines_dump(request: Request):
+    """Bulk dump gamelines from Python list - handles both JSON and Python literal syntax"""
+    try:
+        # Get the raw request body
+        body = await request.body()
+        body_text = body.decode('utf-8')
+        
+        # Try to parse as JSON first
+        try:
+            data = json.loads(body_text)
+            gamelines = data.get('gamelines', [])
+        except json.JSONDecodeError:
+            # If JSON fails, try to parse as Python literal
+            # Remove variable assignment and clean up Python syntax
+            cleaned_text = body_text.strip()
+            
+            # Remove 'gamelines = ' prefix if present
+            if cleaned_text.startswith('gamelines'):
+                cleaned_text = cleaned_text.split('=', 1)[1].strip()
+            
+            # Convert Python literal to JSON
+            cleaned_text = cleaned_text.replace("'", '"')  # Single to double quotes
+            cleaned_text = cleaned_text.replace('None', 'null')  # None to null
+            cleaned_text = cleaned_text.replace('True', 'true')  # True to true
+            cleaned_text = cleaned_text.replace('False', 'false')  # False to false
+            
+            # Parse the cleaned JSON
+            gamelines = json.loads(cleaned_text)
+            
+            # If it's not a list yet, try to get the gamelines key
+            if isinstance(gamelines, dict) and 'gamelines' in gamelines:
+                gamelines = gamelines['gamelines']
+        
+        if not gamelines or not isinstance(gamelines, list):
+            raise HTTPException(status_code=400, detail="No valid gamelines list provided")
+        
+        manager = GamelineManager()
+        success_count = 0
+        
+        for gameline in gamelines:
+            try:
+                game_data = {
+                    'home': gameline.get('home_team'),
+                    'away': gameline.get('away_team'),
+                    'game_day': gameline.get('game_day'),
+                    'start_time': gameline.get('start_time'),
+                    'home_ml': gameline.get('home_ml'),
+                    'away_ml': gameline.get('away_ml'),
+                    'home_spread': gameline.get('home_spread'),
+                    'away_spread': gameline.get('away_spread'),
+                    'home_spread_odds': gameline.get('home_spread_odds'),
+                    'away_spread_odds': gameline.get('away_spread_odds'),
+                    'over_under': gameline.get('over_under'),
+                    'over_odds': gameline.get('over_odds'),
+                    'under_odds': gameline.get('under_odds')
+                }
+                
+                source = gameline.get('source', 'manual_dump')
+                manager.update_gameline(source, game_data)
+                success_count += 1
+                
+            except Exception as e:
+                logger.error(f"Error processing gameline {gameline}: {e}")
+                continue
+        
+        return {
+            "status": "success",
+            "message": f"Successfully added {success_count} gamelines to database",
+            "gamelines_added": success_count,
+            "total_processed": len(gamelines)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing bulk gamelines dump: {str(e)}")
+
 @app.post("/ncaaf/gamelines/manual/quick")
 async def submit_quick_gameline(
     source: str = Form(...),
@@ -1066,6 +1142,101 @@ async def bulk_gamelines_dump(data: dict):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing bulk gamelines dump: {str(e)}")
+
+@app.get("/ncaaf/gamelines/manual/dumps", response_class=HTMLResponse)
+def gamelines_dump_form():
+    """Serve HTML form for bulk gamelines dump"""
+    html_content = f"""
+    <html>
+    <head>
+        <title>Bulk NCAAF Gamelines Dump</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 40px; }}
+            .form-container {{ max-width: 1000px; }}
+            .form-group {{ margin-bottom: 15px; }}
+            label {{ display: block; margin-bottom: 5px; font-weight: bold; }}
+            textarea {{ width: 100%; height: 300px; padding: 10px; font-family: monospace; }}
+            button {{ padding: 12px 24px; background: #007bff; color: white; border: none; cursor: pointer; font-size: 16px; }}
+            button:hover {{ background: #0056b3; }}
+            .example {{ background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
+            .code {{ font-family: monospace; background: #e9ecef; padding: 10px; }}
+        </style>
+    </head>
+    <body>
+        <h2>Bulk NCAAF Gamelines Dump</h2>
+        
+        <div class="form-container">
+            <div class="example">
+                <h3>Example Python List Format:</h3>
+                <div class="code">
+gamelines = [<br>
+&nbsp;&nbsp;{{<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"source": "draftkings",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"game_day": "2025-11-22",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"start_time": "14:30",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_team": "Ohio State",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_team": "Michigan",<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_ml": -150,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_ml": 130,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_spread": -3.5,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_spread": 3.5,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"home_spread_odds": -110,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"away_spread_odds": -110,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"over_under": 55.5,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"over_odds": -110,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;"under_odds": -110<br>
+&nbsp;&nbsp;}}<br>
+]
+                </div>
+            </div>
+            
+            <form id="gamelinesDumpForm">
+                <div class="form-group">
+                    <label for="gamelinesData">Paste your Python list of gamelines:</label>
+                    <textarea id="gamelinesData" name="gamelines_data" placeholder="Paste your Python list here..."></textarea>
+                </div>
+                
+                <button type="submit">Submit Bulk Gamelines</button>
+            </form>
+            
+            <div id="result" style="margin-top: 20px;"></div>
+        </div>
+
+        <script>
+            document.getElementById('gamelinesDumpForm').onsubmit = async function(e) {{
+                e.preventDefault();
+                const gamelinesData = document.getElementById('gamelinesData').value;
+                
+                if (!gamelinesData.trim()) {{
+                    document.getElementById('result').innerHTML = 
+                        '<p style="color: red;">❌ Please provide gamelines data</p>';
+                    return;
+                }}
+                
+                try {{
+                    // Send the raw text as-is, let the backend handle the parsing
+                    const response = await fetch('/ncaaf/gamelines/manual/dumps', {{
+                        method: 'POST',
+                        headers: {{
+                            'Content-Type': 'text/plain',
+                        }},
+                        body: gamelinesData
+                    }});
+                    
+                    const result = await response.json();
+                    document.getElementById('result').innerHTML = 
+                        `<p style="color: green;">✅ ${{result.message}}</p>`;
+                        
+                }} catch (error) {{
+                    document.getElementById('result').innerHTML = 
+                        `<p style="color: red;">❌ Error: ${{error}}</p>`;
+                }}
+            }};
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
 
 # Keep your existing player and coach endpoints
 @app.get("/ncaaf/player-stats", response_class=HTMLResponse)
