@@ -3,7 +3,6 @@ import datetime as dt
 import requests
 from bs4 import BeautifulSoup
 import os
-import pandas as pd
 import logging
 import time
 from random import uniform
@@ -31,7 +30,7 @@ def get_soup(url):
 
 def get_team_gamelog(team: str, year: int) -> List[Dict]:
     """
-    Get NCAAF team gamelog using Sports Reference with improved table targeting
+    Get NCAAF team gamelog using Sports Reference with proper table structure
     """
     all_stats = []
     
@@ -50,57 +49,37 @@ def get_team_gamelog(team: str, year: int) -> List[Dict]:
             logger.warning(f"No schedule found for {team} ({year})")
             return []
         
-        # Target the specific schedule table - try both offense and defense tables
+        # Find the offense table (this is the main gamelog table)
         table = soup.find('table', {'id': 'offense'})
         if not table:
-            table = soup.find('table', {'id': 'defense'})
-        if not table:
-            logger.warning(f"No schedule table found for {team} ({year})")
+            logger.warning(f"No offense table found for {team} ({year})")
             return []
         
-        # More robust row filtering
+        # Get all rows
         rows = table.find_all('tr')
         
         for row in rows:
             try:
-                # Skip header rows and empty rows
+                # Skip header rows
                 if (row.get('class') and 
-                    any(cls in row.get('class', []) for cls in ['thead', 'over_header'])) or not row.find('td'):
+                    any(cls in row.get('class', []) for cls in ['thead', 'over_header'])):
                     continue
                 
-                # Look for cells with data-stat attributes
-                cells = row.find_all(['td', 'th'])
+                # Skip rows that don't have data cells
+                cells = row.find_all('td')
+                if not cells:
+                    continue
+                
                 game_data = {}
                 
+                # Extract data using data-stat attributes
                 for cell in cells:
                     stat_name = cell.get('data-stat')
-                    if not stat_name:
-                        continue
-                        
-                    stat_value = cell.text.strip()
-                    
-                    # Capture all relevant fields
-                    if stat_name in [
-                        'date_game', 'opp_name', 'game_location', 'game_result',
-                        'points', 'opp_points', 'pass_cmp', 'pass_att', 'pass_yds',
-                        'pass_td', 'pass_int', 'rush_att', 'rush_yds', 'rush_td',
-                        'turnovers', 'penalties', 'penalty_yds', 'first_down',
-                        'third_down_conv', 'third_down_att', 'fourth_down_conv',
-                        'fourth_down_att', 'time_of_possession'
-                    ] and stat_value:
-                        game_data[stat_name] = stat_value
-                    
-                    # Also capture the opponent link for team code
-                    if stat_name == 'opp_name' and cell.find('a'):
-                        opp_link = cell.find('a').get('href', '')
-                        if '/cfb/schools/' in opp_link:
-                            game_data['opp_code'] = opp_link.split('/')[-2]
+                    if stat_name:
+                        game_data[stat_name] = cell.text.strip()
                 
-                # Only add if we have basic game info and it's not a header row
-                if ('date_game' in game_data and game_data['date_game'] and 
-                    'opp_name' in game_data and game_data['opp_name'] and
-                    not game_data['date_game'].startswith('Date')):
-                    
+                # Only add if we have basic game info
+                if game_data.get('date_game') and game_data.get('opp_name'):
                     # Add metadata
                     game_data['team'] = team
                     game_data['year'] = year
@@ -121,7 +100,7 @@ def get_team_gamelog(team: str, year: int) -> List[Dict]:
 
 def get_team_stats(team: str, year: int) -> Dict:
     """
-    Main function to get NCAAF team stats - uses Sports Reference data structure
+    Main function to get NCAAF team stats
     """
     try:
         # First try to get from database
@@ -153,7 +132,7 @@ def get_team_stats(team: str, year: int) -> Dict:
         return {"error": str(e)}
 
 def _calculate_summary_stats(games: List[Dict]) -> Dict:
-    """Calculate summary statistics from game data using Sports Reference field names"""
+    """Calculate summary statistics from game data"""
     try:
         if not games:
             return {}
@@ -174,33 +153,38 @@ def _calculate_summary_stats(games: List[Dict]) -> Dict:
         
         for game in games:
             try:
-                # Calculate win/loss - Sports Reference uses 'game_result' field
+                # Calculate win/loss
                 result = game.get('game_result', '')
                 if 'W' in result.upper():
                     wins += 1
                 elif 'L' in result.upper():
                     losses += 1
                 
-                # Accumulate stats using Sports Reference field names
-                points_for = int(game['points']) if game.get('points') and game['points'].isdigit() else 0
-                points_against = int(game['opp_points']) if game.get('opp_points') and game['opp_points'].isdigit() else 0
+                # Points
+                points_for = _safe_int(game.get('points'))
+                points_against = _safe_int(game.get('opp_points'))
                 
                 total_points += points_for
                 total_points_against += points_against
                 
-                # Passing and rushing stats
-                pass_yards = int(game['pass_yds']) if game.get('pass_yds') and game['pass_yds'].isdigit() else 0
-                rush_yards = int(game['rush_yds']) if game.get('rush_yds') and game['rush_yds'].isdigit() else 0
-                pass_att = int(game['pass_att']) if game.get('pass_att') and game['pass_att'].isdigit() else 0
-                pass_cmp = int(game['pass_cmp']) if game.get('pass_cmp') and game['pass_cmp'].isdigit() else 0
-                rush_att = int(game['rush_att']) if game.get('rush_att') and game['rush_att'].isdigit() else 0
-                turnovers = int(game['turnovers']) if game.get('turnovers') and game['turnovers'].isdigit() else 0
+                # Passing stats
+                pass_yards = _safe_int(game.get('pass_yds'))
+                pass_att = _safe_int(game.get('pass_att'))
+                pass_cmp = _safe_int(game.get('pass_cmp'))
                 
                 total_pass_yards += pass_yards
-                total_rush_yards += rush_yards
                 total_pass_attempts += pass_att
                 total_pass_completions += pass_cmp
+                
+                # Rushing stats
+                rush_yards = _safe_int(game.get('rush_yds'))
+                rush_att = _safe_int(game.get('rush_att'))
+                
+                total_rush_yards += rush_yards
                 total_rush_attempts += rush_att
+                
+                # Turnovers
+                turnovers = _safe_int(game.get('turnovers'))
                 total_turnovers += turnovers
                 
             except (ValueError, KeyError) as e:
@@ -230,6 +214,15 @@ def _calculate_summary_stats(games: List[Dict]) -> Dict:
     except Exception as e:
         logger.error(f"Error calculating summary stats: {e}")
         return {}
+
+def _safe_int(value):
+    """Safely convert to int, return 0 if invalid"""
+    try:
+        if value and str(value).strip().replace('.', '').isdigit():
+            return int(float(value))
+        return 0
+    except (ValueError, TypeError):
+        return 0
 
 def _store_stats_in_db(team: str, year: int, games: List[Dict]) -> bool:
     """Store stats in SQLite database for caching"""
@@ -263,24 +256,24 @@ def _store_stats_in_db(team: str, year: int, games: List[Dict]) -> bool:
                             game.get('opp_name', ''),
                             game.get('game_location', ''),
                             game.get('game_result', ''),
-                            int(game.get('points', 0)) if game.get('points') and str(game['points']).isdigit() else 0,
-                            int(game.get('opp_points', 0)) if game.get('opp_points') and str(game['opp_points']).isdigit() else 0,
-                            int(game.get('pass_cmp', 0)) if game.get('pass_cmp') and str(game['pass_cmp']).isdigit() else 0,
-                            int(game.get('pass_att', 0)) if game.get('pass_att') and str(game['pass_att']).isdigit() else 0,
-                            int(game.get('pass_yds', 0)) if game.get('pass_yds') and str(game['pass_yds']).isdigit() else 0,
-                            int(game.get('pass_td', 0)) if game.get('pass_td') and str(game['pass_td']).isdigit() else 0,
-                            int(game.get('pass_int', 0)) if game.get('pass_int') and str(game['pass_int']).isdigit() else 0,
-                            int(game.get('rush_att', 0)) if game.get('rush_att') and str(game['rush_att']).isdigit() else 0,
-                            int(game.get('rush_yds', 0)) if game.get('rush_yds') and str(game['rush_yds']).isdigit() else 0,
-                            int(game.get('rush_td', 0)) if game.get('rush_td') and str(game['rush_td']).isdigit() else 0,
-                            int(game.get('turnovers', 0)) if game.get('turnovers') and str(game['turnovers']).isdigit() else 0,
-                            int(game.get('penalties', 0)) if game.get('penalties') and str(game['penalties']).isdigit() else 0,
-                            int(game.get('penalty_yds', 0)) if game.get('penalty_yds') and str(game['penalty_yds']).isdigit() else 0,
-                            int(game.get('first_down', 0)) if game.get('first_down') and str(game['first_down']).isdigit() else 0,
-                            int(game.get('third_down_conv', 0)) if game.get('third_down_conv') and str(game['third_down_conv']).isdigit() else 0,
-                            int(game.get('third_down_att', 0)) if game.get('third_down_att') and str(game['third_down_att']).isdigit() else 0,
-                            int(game.get('fourth_down_conv', 0)) if game.get('fourth_down_conv') and str(game['fourth_down_conv']).isdigit() else 0,
-                            int(game.get('fourth_down_att', 0)) if game.get('fourth_down_att') and str(game['fourth_down_att']).isdigit() else 0,
+                            _safe_int(game.get('points')),
+                            _safe_int(game.get('opp_points')),
+                            _safe_int(game.get('pass_cmp')),
+                            _safe_int(game.get('pass_att')),
+                            _safe_int(game.get('pass_yds')),
+                            _safe_int(game.get('pass_td')),
+                            _safe_int(game.get('pass_int')),
+                            _safe_int(game.get('rush_att')),
+                            _safe_int(game.get('rush_yds')),
+                            _safe_int(game.get('rush_td')),
+                            _safe_int(game.get('turnovers')),
+                            _safe_int(game.get('penalties')),
+                            _safe_int(game.get('penalty_yds')),
+                            _safe_int(game.get('first_down')),
+                            _safe_int(game.get('third_down_conv')),
+                            _safe_int(game.get('third_down_att')),
+                            _safe_int(game.get('fourth_down_conv')),
+                            _safe_int(game.get('fourth_down_att')),
                             game.get('time_of_possession', ''),
                             game.get('opp_code', ''),
                             game.get('team', ''),
@@ -384,36 +377,27 @@ def get_player_stats(player: str, season: Optional[int] = None) -> Dict:
         logger.error(f"Error getting NCAAF player stats: {e}")
         return {}
 
-def get_injury_report(team: str, week: int) -> List[Dict]:
-    """Get NCAAF injury report - placeholder implementation"""
-    logger.info(f"Getting injury report for {team} week {week} - not implemented")
-    return []
+# Test function
+def test_scraping():
+    """Test the scraping functionality"""
+    test_team = "Alabama"
+    test_year = 2023
 
-def get_roster(team: str) -> List[Dict]:
-    """Get NCAAF roster - placeholder implementation"""
-    logger.info(f"Getting roster for {team} - not implemented")
-    return []
+    print(f"Testing NCAAF stats for {test_team} {test_year}...")
+    stats = get_team_gamelog(test_team, test_year)
 
-def get_coach_stats(coach: str) -> Dict:
-    """Get NCAAF coach stats - placeholder implementation"""
-    logger.info(f"Getting coach stats for {coach} - not implemented")
-    return {}
-
-test_team = "Alabama"
-test_year = 2023
-
-print(f"Testing NCAAF stats for {test_team} {test_year}...")
-stats = get_team_gamelog(test_team, test_year)
-
-if stats:
-    print(f"Successfully loaded {len(stats)} games for {test_team}")
     if stats:
-        print(f"Sample game: {stats[0]}")
+        print(f"Successfully loaded {len(stats)} games for {test_team}")
+        if stats:
+            print(f"Sample game keys: {list(stats[0].keys())}")
+            print(f"Sample game: {stats[0]}")
         
-    # Test summary stats
-    summary = get_team_stats(test_team, test_year)
-    print(f"Summary: {summary.get('record', 'N/A')} | PPG: {summary.get('points_per_game', 'N/A')}")
-else:
-    print(f"No data found for {test_team} {test_year}")
+        # Test summary stats
+        summary = get_team_stats(test_team, test_year)
+        print(f"Summary: {summary.get('record', 'N/A')} | PPG: {summary.get('points_per_game', 'N/A')}")
+    else:
+        print(f"No data found for {test_team} {test_year}")
 
-print('ncaaf stats loaded')
+    print('ncaaf stats loaded')
+
+test_scraping()
