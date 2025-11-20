@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 sys.path.append(os.path.dirname(__file__) + "/ncaafFiles/")
 from ncaafGamelines import *
-from ncaafGetData import get_team_stats, get_player_stats, ncaafdb
+from ncaafGetData import get_team_stats, get_player_stats
 from ncaafTeams import NcaafTeam
 from ncaafEvents import ncaaf_events_manager
 
