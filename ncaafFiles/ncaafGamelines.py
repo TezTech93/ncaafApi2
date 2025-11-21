@@ -152,77 +152,48 @@ class GamelineManager:
         finally:
             conn.close()
 
-    def delete_gamelines(self, source=None):
-        """Delete gamelines that have already started or are from past dates"""
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-        print('Deleting old NCAAF gamelines...')
+   def delete_gamelines(self, source=None):
+    """Delete gamelines for games that have already started"""
+    conn = sqlite3.connect(self.db_file)
+    cursor = conn.cursor()
+    
+    try:
+        # More efficient single query approach
+        query = '''
+            DELETE FROM gamelines 
+            WHERE (game_day < ?) 
+               OR (game_day = ? AND start_time IS NOT NULL AND start_time < ?)
+               OR (game_day = ? AND start_time IS NULL)
+        '''
         
-        try:
-            # Build the base query to select potential rows to delete
-            query = 'SELECT id, game_day, start_time, home_team, away_team FROM gamelines'
-            params = []
-            if source:
-                query += ' WHERE source = ?'
-                params.append(source)
-            query += ' ORDER BY game_day, start_time'
-            
-            cursor.execute(query, params)
-            rows_to_check = cursor.fetchall()
-            
-            deleted_count = 0
-            for row in rows_to_check:
-                row_id, game_day_str, start_time, home_team, away_team = row
-                
-                # Convert game_day string to date object
-                try:
-                    game_day = dt.datetime.strptime(game_day_str, '%Y-%m-%d').date()
-                except ValueError:
-                    logger.warning(f"Could not parse game_day: {game_day_str}")
-                    continue
-                
-                # Convert start_time string to time object if it exists
-                game_time = None
-                if start_time:
-                    try:
-                        # Handle various time formats
-                        if ':' in start_time and 'Z' in start_time:
-                            # Handle format like "00:15Z"
-                            time_part = start_time.replace('Z', '')
-                            game_time = dt.datetime.strptime(time_part, '%H:%M').time()
-                        else:
-                            game_time = dt.datetime.strptime(start_time, '%H:%M:%S').time()
-                    except ValueError:
-                        try:
-                            game_time = dt.datetime.strptime(start_time, '%H:%M').time()
-                        except ValueError:
-                            logger.warning(f"Could not parse start_time: {start_time}")
-                            continue
-                
-                # Check if the game is from a past date
-                if today > game_day:
-                    cursor.execute('DELETE FROM gamelines WHERE id = ?', (row_id,))
-                    deleted_count += 1
-                    logger.debug(f"Deleted past NCAAF game: {home_team} vs {away_team} from {game_day}")
-                # Check if the game is from today but the start time has passed
-                elif today == game_day and game_time:
-                    # Create datetime object for game start
-                    game_datetime = dt.datetime.combine(game_day, game_time)
-                    if now > game_datetime:
-                        cursor.execute('DELETE FROM gamelines WHERE id = ?', (row_id,))
-                        deleted_count += 1
-                        logger.debug(f"Deleted completed NCAAF game: {home_team} vs {away_team} from {game_day} at {start_time}")
-            
-            conn.commit()
+        # Format current time for comparison
+        current_time_str = now.strftime('%H:%M:%S')
+        
+        cursor.execute(query, (
+            today,           # game_day < today
+            today,           # game_day = today AND start_time < now
+            current_time_str,
+            today            # game_day = today AND start_time IS NULL (assume past)
+        ))
+        
+        deleted_count = cursor.rowcount
+        conn.commit()
+        
+        if deleted_count > 0:
             logger.info(f"Successfully deleted {deleted_count} expired NCAAF gamelines")
-            return deleted_count
+        else:
+            logger.debug("No expired NCAAF gamelines to delete")
             
-        except Exception as e:
-            logger.error(f"Error deleting NCAAF gamelines: {e}")
-            conn.rollback()
-            return 0
-        finally:
-            conn.close()
+        return deleted_count
+        
+    except Exception as e:
+        logger.error(f"Error deleting NCAAF gamelines: {e}")
+        conn.rollback()
+        return 0
+    finally:
+        conn.close()
+           
+       
 
 # Cache functions
 def cache_data(data, filename=CACHE_FILE):
