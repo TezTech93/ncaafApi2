@@ -153,45 +153,45 @@ class GamelineManager:
             conn.close()
 
    def delete_gamelines(self, source=None):
-    """Delete gamelines for games that have already started"""
-    conn = sqlite3.connect(self.db_file)
-    cursor = conn.cursor()
+       """Delete gamelines for games that have already started"""
+        conn = sqlite3.connect(self.db_file)
+        cursor = conn.cursor()
     
-    try:
-        # More efficient single query approach
-        query = '''
-            DELETE FROM gamelines 
-            WHERE (game_day < ?) 
-               OR (game_day = ? AND start_time IS NOT NULL AND start_time < ?)
-               OR (game_day = ? AND start_time IS NULL)
-        '''
-        
-        # Format current time for comparison
-        current_time_str = now.strftime('%H:%M:%S')
-        
-        cursor.execute(query, (
-            today,           # game_day < today
-            today,           # game_day = today AND start_time < now
-            current_time_str,
-            today            # game_day = today AND start_time IS NULL (assume past)
-        ))
-        
-        deleted_count = cursor.rowcount
-        conn.commit()
-        
-        if deleted_count > 0:
-            logger.info(f"Successfully deleted {deleted_count} expired NCAAF gamelines")
-        else:
-            logger.debug("No expired NCAAF gamelines to delete")
+        try:
+            # More efficient single query approach
+            query = '''
+                DELETE FROM gamelines 
+                WHERE (game_day < ?) 
+                   OR (game_day = ? AND start_time IS NOT NULL AND start_time < ?)
+                   OR (game_day = ? AND start_time IS NULL)
+            '''
             
-        return deleted_count
-        
-    except Exception as e:
-        logger.error(f"Error deleting NCAAF gamelines: {e}")
-        conn.rollback()
-        return 0
-    finally:
-        conn.close()
+            # Format current time for comparison
+            current_time_str = now.strftime('%H:%M:%S')
+            
+            cursor.execute(query, (
+                today,           # game_day < today
+                today,           # game_day = today AND start_time < now
+                current_time_str,
+                today            # game_day = today AND start_time IS NULL (assume past)
+            ))
+            
+            deleted_count = cursor.rowcount
+            conn.commit()
+            
+            if deleted_count > 0:
+                logger.info(f"Successfully deleted {deleted_count} expired NCAAF gamelines")
+            else:
+                logger.debug("No expired NCAAF gamelines to delete")
+                
+            return deleted_count
+            
+        except Exception as e:
+            logger.error(f"Error deleting NCAAF gamelines: {e}")
+            conn.rollback()
+            return 0
+        finally:
+            conn.close()
            
        
 
