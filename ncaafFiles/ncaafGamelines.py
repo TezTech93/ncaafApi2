@@ -153,11 +153,11 @@ class GamelineManager:
             conn.close()
 
    def delete_gamelines(self, source=None):
-       """Delete gamelines for games that have already started"""
-        conn = sqlite3.connect(self.db_file)
-        cursor = conn.cursor()
-    
-        try:
+       
+       conn = sqlite3.connect(self.db_file)
+       cursor = conn.cursor()
+       
+       try:
             # More efficient single query approach
             query = '''
                 DELETE FROM gamelines 
