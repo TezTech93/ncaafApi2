@@ -151,9 +151,8 @@ class GamelineManager:
             return []
         finally:
             conn.close()
-
-   def delete_gamelines(self, source=None):
-       
+            
+    def delete_gamelines(self, source=None):
        conn = sqlite3.connect(self.db_file)
        cursor = conn.cursor()
        
