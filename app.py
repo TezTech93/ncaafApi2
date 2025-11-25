@@ -2,8 +2,11 @@ from fastapi import FastAPI, HTTPException, Request, Form
 from fastapi.middleware.cors import CORSMiddleware 
 from fastapi.responses import HTMLResponse
 import sys, os
-import json  # Add this import
-import logging  # Add this import
+import json 
+import logging 
+import datetime as dt
+from fastapi.responses import FileResponse
+import tempfile
 
 # Add logger configuration
 logging.basicConfig(level=logging.INFO)
@@ -1168,6 +1171,303 @@ def player_select_form():
     </html>
     """
     return HTMLResponse(content=html_content)
+
+@app.get("/ncaaf/gamelines/export")
+def export_ncaaf_gamelines():
+    """Export all NCAAF gamelines to a JSON file"""
+    try:
+        manager = GamelineManager()
+        
+        # Export gamelines using the manager method
+        export_filepath = manager.export_gamelines()
+        
+        if not export_filepath:
+            raise HTTPException(status_code=404, detail="No gamelines to export")
+        
+        # Return the file for download
+        filename = os.path.basename(export_filepath)
+        return FileResponse(
+            path=export_filepath,
+            media_type='application/json',
+            filename=filename
+        )
+        
+    except Exception as e:
+        logger.error(f"Error exporting NCAAF gamelines: {e}")
+        raise HTTPException(status_code=500, detail=f"Error exporting gamelines: {str(e)}")
+
+@app.post("/ncaaf/gamelines/import")
+async def import_ncaaf_gamelines(file: UploadFile = File(...)):
+    """Import NCAAF gamelines from a JSON file"""
+    try:
+        # Validate file type
+        if not file.filename.endswith('.json'):
+            raise HTTPException(status_code=400, detail="Only JSON files are supported")
+        
+        # Create a temporary file to save the upload
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.json') as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        try:
+            manager = GamelineManager()
+            success = manager.import_gamelines(temp_file_path)
+            
+            if success:
+                return {
+                    "status": "success",
+                    "message": "Gamelines imported successfully",
+                    "filename": file.filename
+                }
+            else:
+                raise HTTPException(status_code=400, detail="Failed to import gamelines - invalid file format")
+                
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error importing NCAAF gamelines: {e}")
+        raise HTTPException(status_code=500, detail=f"Error importing gamelines: {str(e)}")
+
+@app.get("/ncaaf/gamelines/export/form", response_class=HTMLResponse)
+def export_gamelines_form():
+    """Serve HTML form for exporting and importing gamelines"""
+    html_content = """
+    <html>
+    <head>
+        <title>NCAAF Gamelines Export/Import</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 40px; }
+            .form-container { max-width: 800px; }
+            .section { 
+                border: 1px solid #ddd; 
+                padding: 20px; 
+                margin-bottom: 30px; 
+                border-radius: 5px;
+            }
+            h2 { color: #333; border-bottom: 2px solid #007bff; padding-bottom: 10px; }
+            button { 
+                padding: 12px 24px; 
+                background: #007bff; 
+                color: white; 
+                border: none; 
+                cursor: pointer; 
+                font-size: 16px;
+                margin-right: 10px;
+                margin-bottom: 10px;
+            }
+            button:hover { background: #0056b3; }
+            .export-btn { background: #28a745; }
+            .export-btn:hover { background: #218838; }
+            .import-btn { background: #ffc107; color: black; }
+            .import-btn:hover { background: #e0a800; }
+            .info-box { 
+                background: #e7f3ff; 
+                padding: 15px; 
+                border-radius: 5px; 
+                margin: 15px 0;
+            }
+            .file-info { 
+                background: #f8f9fa; 
+                padding: 10px; 
+                border-radius: 3px; 
+                font-family: monospace;
+                margin: 10px 0;
+            }
+            #result { margin-top: 20px; padding: 15px; border-radius: 5px; }
+            .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+            .error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        </style>
+    </head>
+    <body>
+        <h1>NCAAF Gamelines Export & Import</h1>
+        
+        <div class="form-container">
+            <!-- Export Section -->
+            <div class="section">
+                <h2>📤 Export Gamelines</h2>
+                <div class="info-box">
+                    <p><strong>Export Format:</strong> JSON file with timestamp (ncaaf_gamelines_export_YYYYMMDD_HHMM.json)</p>
+                    <p><strong>Includes:</strong> All current gamelines with metadata (sport, timestamp, total games)</p>
+                </div>
+                <button class="export-btn" onclick="exportGamelines()">Export Gamelines</button>
+                <button onclick="viewExportFormat()">View Export Format</button>
+            </div>
+
+            <!-- Import Section -->
+            <div class="section">
+                <h2>📥 Import Gamelines</h2>
+                <div class="info-box">
+                    <p><strong>Supported Format:</strong> JSON export files created by this system</p>
+                    <p><strong>Note:</strong> Imported gamelines will be added to the database (duplicates will be updated)</p>
+                </div>
+                <form id="importForm" enctype="multipart/form-data">
+                    <input type="file" id="importFile" name="file" accept=".json" required style="margin-bottom: 15px;">
+                    <button type="submit" class="import-btn">Import Gamelines</button>
+                </form>
+            </div>
+
+            <!-- Result Display -->
+            <div id="result"></div>
+
+            <!-- Export Format Preview -->
+            <div id="exportFormat" style="display: none; margin-top: 20px;">
+                <h3>Export File Format Example:</h3>
+                <div class="file-info">
+                    {<br>
+                    &nbsp;&nbsp;"sport": "ncaaf",<br>
+                    &nbsp;&nbsp;"export_timestamp": "2024-01-15T14:30:00",<br>
+                    &nbsp;&nbsp;"total_games": 25,<br>
+                    &nbsp;&nbsp;"gamelines": [<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;{<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"source": "draftkings",<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"game_day": "2024-01-15",<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"start_time": "19:30",<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"home_team": "Alabama",<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"away_team": "Georgia",<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"home_ml": -150,<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"away_ml": 130,<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"home_spread": -3.5,<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"away_spread": 3.5,<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"home_spread_odds": -110,<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"away_spread_odds": -110,<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"over_under": 55.5,<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"over_odds": -110,<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"under_odds": -110<br>
+                    &nbsp;&nbsp;&nbsp;&nbsp;}<br>
+                    &nbsp;&nbsp;]<br>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function exportGamelines() {
+                // Trigger file download
+                window.open('/ncaaf/gamelines/export', '_blank');
+                
+                // Show success message
+                showResult('Export started! Your file will download shortly.', 'success');
+            }
+
+            function viewExportFormat() {
+                const formatDiv = document.getElementById('exportFormat');
+                formatDiv.style.display = formatDiv.style.display === 'none' ? 'block' : 'none';
+            }
+
+            document.getElementById('importForm').onsubmit = async function(e) {
+                e.preventDefault();
+                
+                const fileInput = document.getElementById('importFile');
+                const file = fileInput.files[0];
+                
+                if (!file) {
+                    showResult('Please select a file to import.', 'error');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const response = await fetch('/ncaaf/gamelines/import', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        showResult(`✅ ${result.message}`, 'success');
+                    } else {
+                        showResult(`❌ Error: ${result.detail}`, 'error');
+                    }
+                    
+                    // Clear file input
+                    fileInput.value = '';
+                    
+                } catch (error) {
+                    showResult(`❌ Error: ${error}`, 'error');
+                }
+            };
+
+            function showResult(message, type) {
+                const resultDiv = document.getElementById('result');
+                resultDiv.innerHTML = message;
+                resultDiv.className = type;
+                resultDiv.style.display = 'block';
+                
+                // Scroll to result
+                resultDiv.scrollIntoView({ behavior: 'smooth' });
+            }
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+@app.get("/ncaaf/gamelines/export/list")
+def list_export_files():
+    """List all available export files"""
+    try:
+        export_dir = 'exports'
+        if not os.path.exists(export_dir):
+            return {"exports": [], "message": "No export directory found"}
+        
+        export_files = []
+        for filename in os.listdir(export_dir):
+            if filename.startswith('ncaaf_gamelines_export_') and filename.endswith('.json'):
+                filepath = os.path.join(export_dir, filename)
+                file_stats = os.stat(filepath)
+                export_files.append({
+                    'filename': filename,
+                    'filepath': filepath,
+                    'size_bytes': file_stats.st_size,
+                    'created_time': dt.datetime.fromtimestamp(file_stats.st_ctime).isoformat(),
+                    'download_url': f"/ncaaf/gamelines/export/file/{filename}"
+                })
+        
+        # Sort by creation time (newest first)
+        export_files.sort(key=lambda x: x['created_time'], reverse=True)
+        
+        return {
+            "exports": export_files,
+            "total_files": len(export_files)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error listing export files: {e}")
+        raise HTTPException(status_code=500, detail=f"Error listing export files: {str(e)}")
+
+@app.get("/ncaaf/gamelines/export/file/{filename}")
+def download_export_file(filename: str):
+    """Download a specific export file by filename"""
+    try:
+        # Security: Validate filename to prevent directory traversal
+        if not filename.startswith('ncaaf_gamelines_export_') or not filename.endswith('.json'):
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        
+        filepath = os.path.join('exports', filename)
+        
+        if not os.path.exists(filepath):
+            raise HTTPException(status_code=404, detail="Export file not found")
+        
+        return FileResponse(
+            path=filepath,
+            media_type='application/json',
+            filename=filename
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error downloading export file: {e}")
+        raise HTTPException(status_code=500, detail=f"Error downloading file: {str(e)}")
 
 @app.get("/ncaaf/db-check")
 def db_check():
